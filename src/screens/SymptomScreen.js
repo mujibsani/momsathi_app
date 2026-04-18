@@ -1,64 +1,83 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, ScrollView } from "react-native";
+import { View, Text, ScrollView } from "react-native";
 import API from "../services/api";
+import SymptomCard from "../components/SymptomCard";
 
 export default function SymptomScreen() {
-  const [input, setInput] = useState("");
-  const [data, setData] = useState(null);
+  const [result, setResult] = useState(null);
 
-  const check = async () => {
+  const symptoms = [
+    { label: "Back Pain", slug: "back-pain" },
+    { label: "Headache", slug: "headache" },
+    { label: "Swelling", slug: "swelling" },
+    { label: "Stress", slug: "stress" },
+    { label: "Nausea", slug: "nausea" }
+  ];
+
+  const checkProblem = async (slug) => {
     try {
       const res = await API.get(
-        `/problems/helper/?problem=${input}`
+        `/problems/helper/?problem=${slug}`
       );
-      setData(res.data);
+      setResult(res.data);
     } catch (err) {
       console.log(err);
     }
   };
 
   return (
-    <ScrollView style={{ padding: 20, marginTop: 40 }}>
+    <ScrollView style={{ flex: 1, padding: 20, backgroundColor: "#F6F8FF" }}>
 
-      <Text style={{ fontSize: 18 }}>
+      <Text style={{ fontSize: 22, fontWeight: "bold" }}>
         What are you feeling?
       </Text>
 
-      <TextInput
-        placeholder="e.g. back-pain"
-        value={input}
-        onChangeText={setInput}
-        style={{
-          borderWidth: 1,
-          padding: 10,
-          marginVertical: 10
-        }}
-      />
+      <Text style={{ marginBottom: 20, color: "#666" }}>
+        Tap your symptom
+      </Text>
 
-      <Button title="Check" onPress={check} />
+      {/* Symptom buttons */}
+      {symptoms.map((item, i) => (
+        <SymptomCard
+          key={i}
+          label={item.label}
+          onPress={() => checkProblem(item.slug)}
+        />
+      ))}
 
-      {data && (
-        <View style={{ marginTop: 20 }}>
+      {/* RESULT UI */}
+      {result && (
+        <View
+          style={{
+            marginTop: 25,
+            backgroundColor: "white",
+            padding: 20,
+            borderRadius: 15,
+            elevation: 5
+          }}
+        >
 
           <Text style={{ fontSize: 20, fontWeight: "bold" }}>
-            {data.problem}
+            {result.problem}
           </Text>
 
-          <Text>Urgency: {data.urgency}</Text>
-
-          <Text style={{ marginTop: 10 }}>
-            {data.what_to_do}
+          <Text style={{ marginTop: 5 }}>
+            Urgency: {result.urgency}
           </Text>
 
           <Text style={{ marginTop: 10 }}>
-            Avoid: {data.avoid}
+            {result.what_to_do}
+          </Text>
+
+          <Text style={{ marginTop: 10 }}>
+            Avoid: {result.avoid}
           </Text>
 
           <Text style={{ marginTop: 10, fontWeight: "bold" }}>
             Exercises:
           </Text>
 
-          {data.exercises.map((ex, i) => (
+          {result.exercises.map((ex, i) => (
             <Text key={i}>
               • {ex.name} ({ex.duration} min)
             </Text>
