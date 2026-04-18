@@ -3,6 +3,7 @@ import { View, Text, ScrollView } from "react-native";
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
 import { getUrgencyColor } from "../utils/colors";
+import DangerAlert from "../components/DangerAlert";
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
@@ -75,6 +76,9 @@ export default function SymptomScreen() {
           >
             {result.urgency.toUpperCase()}
           </Text>
+          {result.urgency === "danger" && (
+            <DangerAlert warning={result.warning} />
+          )}
 
           {/* Advice */}
           <Text style={{ marginTop: 10 }}>
