@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
+import { getUrgencyColor } from "../utils/colors";
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
@@ -53,26 +54,39 @@ export default function SymptomScreen() {
             backgroundColor: "white",
             padding: 20,
             borderRadius: 15,
-            elevation: 5
+            elevation: 5,
+            borderLeftWidth: 6,
+            borderLeftColor: getUrgencyColor(result.urgency)
           }}
         >
 
+          {/* Title */}
           <Text style={{ fontSize: 20, fontWeight: "bold" }}>
             {result.problem}
           </Text>
 
-          <Text style={{ marginTop: 5 }}>
-            Urgency: {result.urgency}
+          {/* Urgency */}
+          <Text
+            style={{
+              marginTop: 5,
+              fontWeight: "bold",
+              color: getUrgencyColor(result.urgency)
+            }}
+          >
+            {result.urgency.toUpperCase()}
           </Text>
 
+          {/* Advice */}
           <Text style={{ marginTop: 10 }}>
             {result.what_to_do}
           </Text>
 
+          {/* Avoid */}
           <Text style={{ marginTop: 10 }}>
             Avoid: {result.avoid}
           </Text>
 
+          {/* Exercises */}
           <Text style={{ marginTop: 10, fontWeight: "bold" }}>
             Exercises:
           </Text>
