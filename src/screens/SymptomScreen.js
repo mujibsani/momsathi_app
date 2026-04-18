@@ -2,20 +2,22 @@ import React, { useState } from "react";
 import { View, Text, ScrollView } from "react-native";
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
-import { getUrgencyColor } from "../utils/colors";
+import ResultCard from "../components/ResultCard";
 import DangerAlert from "../components/DangerAlert";
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
 
+  // Tap-based symptoms (no typing)
   const symptoms = [
-    { label: "Back Pain", slug: "back-pain" },
-    { label: "Headache", slug: "headache" },
-    { label: "Swelling", slug: "swelling" },
-    { label: "Stress", slug: "stress" },
-    { label: "Nausea", slug: "nausea" }
+    { label: "Back Pain", slug: "back-pain", icon: "🦴", category: "Body Pain" },
+    { label: "Headache", slug: "headache", icon: "🧠", category: "Pain" },
+    { label: "Swelling", slug: "swelling", icon: "🦵", category: "Body Changes" },
+    { label: "Stress", slug: "stress", icon: "😣", category: "Mental" },
+    { label: "Nausea", slug: "nausea", icon: "🤢", category: "Digestion" }
   ];
 
+  // API call
   const checkProblem = async (slug) => {
     try {
       const res = await API.get(
@@ -23,85 +25,49 @@ export default function SymptomScreen() {
       );
       setResult(res.data);
     } catch (err) {
-      console.log(err);
+      console.log("API Error:", err);
     }
   };
 
   return (
-    <ScrollView style={{ flex: 1, padding: 20, backgroundColor: "#F6F8FF" }}>
+    <ScrollView
+      style={{
+        flex: 1,
+        padding: 20,
+        backgroundColor: "#F6F8FF"
+      }}
+    >
 
+      {/* Title */}
       <Text style={{ fontSize: 22, fontWeight: "bold" }}>
         What are you feeling?
       </Text>
 
       <Text style={{ marginBottom: 20, color: "#666" }}>
-        Tap your symptom
+        Tap a symptom to get instant guidance
       </Text>
 
-      {/* Symptom buttons */}
+      {/* Symptom Buttons */}
       {symptoms.map((item, i) => (
         <SymptomCard
           key={i}
           label={item.label}
+          icon={item.icon}
+          category={item.category}
           onPress={() => checkProblem(item.slug)}
         />
       ))}
 
-      {/* RESULT UI */}
+      {/* Result UI */}
       {result && (
-        <View
-          style={{
-            marginTop: 25,
-            backgroundColor: "white",
-            padding: 20,
-            borderRadius: 15,
-            elevation: 5,
-            borderLeftWidth: 6,
-            borderLeftColor: getUrgencyColor(result.urgency)
-          }}
-        >
+        <>
+          <ResultCard result={result} />
 
-          {/* Title */}
-          <Text style={{ fontSize: 20, fontWeight: "bold" }}>
-            {result.problem}
-          </Text>
-
-          {/* Urgency */}
-          <Text
-            style={{
-              marginTop: 5,
-              fontWeight: "bold",
-              color: getUrgencyColor(result.urgency)
-            }}
-          >
-            {result.urgency.toUpperCase()}
-          </Text>
-          {result.urgency === "danger" && (
+          {/* Danger alert only */}
+          {result?.urgency === "danger" && (
             <DangerAlert warning={result.warning} />
           )}
-
-          {/* Advice */}
-          <Text style={{ marginTop: 10 }}>
-            {result.what_to_do}
-          </Text>
-
-          {/* Avoid */}
-          <Text style={{ marginTop: 10 }}>
-            Avoid: {result.avoid}
-          </Text>
-
-          {/* Exercises */}
-          <Text style={{ marginTop: 10, fontWeight: "bold" }}>
-            Exercises:
-          </Text>
-
-          {result.exercises.map((ex, i) => (
-            <Text key={i}>
-              • {ex.name} ({ex.duration} min)
-            </Text>
-          ))}
-
-        </View>
+        </>
       )}
 
     </ScrollView>
