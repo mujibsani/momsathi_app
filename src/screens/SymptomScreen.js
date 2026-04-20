@@ -46,7 +46,7 @@ export default function SymptomScreen() {
       const res = await API.get(
         `/problems/helper/?problem=${slug}&week=${week}`
       );
-
+      console.log("API RESULT:", res.data); 
       setResult(res.data);
 
       /* -------- SAVE HISTORY -------- */
