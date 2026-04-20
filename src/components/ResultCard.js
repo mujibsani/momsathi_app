@@ -18,70 +18,58 @@ export default function ResultCard({ result }) {
       }}
     >
 
-      {/* Title */}
-      <Text style={{
-        fontSize: 22,
-        fontWeight: "bold",
-        marginBottom: 5
-      }}>
+      {/* TITLE */}
+      <Text style={{ fontSize: 20, fontWeight: "bold" }}>
         {result.problem}
       </Text>
 
-      {/* Urgency */}
-      <Text style={{
-        color: color,
-        fontWeight: "bold",
-        marginBottom: 10
-      }}>
+      {/* URGENCY */}
+      <Text
+        style={{
+          marginTop: 5,
+          fontWeight: "bold",
+          color: color
+        }}
+      >
         {result.urgency.toUpperCase()}
       </Text>
 
-      {/* What to do */}
-      <Text style={{
-        fontWeight: "600",
-        marginBottom: 3
-      }}>
-        What to do
-      </Text>
-      <Text style={{ marginBottom: 10 }}>
+      {/* DANGER ALERT */}
+      {result.urgency === "danger" && (
+        <View
+          style={{
+            backgroundColor: "#FFEBEE",
+            padding: 10,
+            marginTop: 10,
+            borderRadius: 8
+          }}
+        >
+          <Text style={{ color: "#C62828", fontWeight: "bold" }}>
+            ⚠️ Seek medical help immediately
+          </Text>
+        </View>
+      )}
+
+      {/* ADVICE */}
+      <Text style={{ marginTop: 10 }}>
         {result.what_to_do}
       </Text>
 
-      {/* Avoid */}
-      <Text style={{
-        fontWeight: "600",
-        marginBottom: 3
-      }}>
-        Avoid
-      </Text>
-      <Text style={{ marginBottom: 10 }}>
-        {result.avoid}
+      {/* AVOID */}
+      <Text style={{ marginTop: 10 }}>
+        Avoid: {result.avoid}
       </Text>
 
-      {/* Exercises */}
-      <Text style={{
-        fontWeight: "600",
-        marginBottom: 5
-      }}>
-        Exercises
+      {/* EXERCISES */}
+      <Text style={{ marginTop: 10, fontWeight: "bold" }}>
+        Exercises:
       </Text>
 
       {result.exercises.map((ex, i) => (
-        <View
-          key={i}
-          style={{
-            backgroundColor: "#F6F8FF",
-            padding: 10,
-            borderRadius: 10,
-            marginBottom: 5
-          }}
-        >
-          <Text>
-            {ex.name} • {ex.duration} min
-          </Text>
-        </View>
+        <Text key={i}>
+          • {ex.name} ({ex.duration} min)
+        </Text>
       ))}
-
     </View>
   );
 }

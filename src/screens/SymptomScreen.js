@@ -1,15 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
 import ResultCard from "../components/ResultCard";
-import DangerAlert from "../components/DangerAlert";
+import { saveHistory } from "../services/history";
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [week, setWeek] = useState(null);
 
-  // Tap-based symptoms (no typing)
   const symptoms = [
     { label: "Back Pain", slug: "back-pain", icon: "🦴", category: "Body Pain" },
     { label: "Headache", slug: "headache", icon: "🧠", category: "Pain" },
@@ -18,18 +20,44 @@ export default function SymptomScreen() {
     { label: "Nausea", slug: "nausea", icon: "🤢", category: "Digestion" }
   ];
 
-  // API call
+  /* ---------------- LOAD WEEK ---------------- */
+  useEffect(() => {
+    loadWeek();
+  }, []);
+
+  const loadWeek = async () => {
+    try {
+      const saved = await AsyncStorage.getItem("pregnancy_week");
+      setWeek(saved ? parseInt(saved) : 20);
+    } catch (e) {
+      console.log("Week load error:", e);
+      setWeek(20);
+    }
+  };
+
+  /* ---------------- API CALL ---------------- */
   const checkProblem = async (slug) => {
-    if (loading) return; // prevent spam clicks
+    if (loading || !week) return;
 
     setLoading(true);
     setResult(null);
 
     try {
-      const res = await API.get(`/problems/helper/?problem=${slug}&week=${week}`)
+      const res = await API.get(
+        `/problems/helper/?problem=${slug}&week=${week}`
+      );
+
       setResult(res.data);
+
+      /* -------- SAVE HISTORY -------- */
+      saveHistory({
+        problem: res.data.problem,
+        urgency: res.data.urgency,
+        date: new Date().toLocaleDateString()
+      });
+
     } catch (err) {
-      console.log(err);
+      console.log("API error:", err);
     } finally {
       setLoading(false);
     }
@@ -44,7 +72,7 @@ export default function SymptomScreen() {
       }}
     >
 
-      {/* Title */}
+      {/* HEADER */}
       <Text style={{ fontSize: 22, fontWeight: "bold" }}>
         What are you feeling?
       </Text>
@@ -53,7 +81,7 @@ export default function SymptomScreen() {
         Tap a symptom to get instant guidance
       </Text>
 
-      {/* Symptom Buttons */}
+      {/* SYMPTOM LIST */}
       {symptoms.map((item, i) => (
         <SymptomCard
           key={i}
@@ -63,6 +91,8 @@ export default function SymptomScreen() {
           onPress={() => checkProblem(item.slug)}
         />
       ))}
+
+      {/* WELCOME STATE */}
       {!loading && !result && (
         <View
           style={{
@@ -81,6 +111,8 @@ export default function SymptomScreen() {
           </Text>
         </View>
       )}
+
+      {/* LOADING STATE */}
       {loading && (
         <View
           style={{
@@ -97,101 +129,13 @@ export default function SymptomScreen() {
           </Text>
 
           <Text style={{ marginTop: 6, color: "#666" }}>
-            Please wait, preparing safe guidance for you...
-          </Text>
-
-          <Text style={{ marginTop: 10, fontSize: 12, color: "#999" }}>
-            MomSathi is checking medical patterns
+            Please wait, preparing safe guidance...
           </Text>
         </View>
       )}
-      {/* Result UI */}
-      {result && (
-        <View
-          style={{
-            marginTop: 25,
-            backgroundColor: "white",
-            borderRadius: 16,
-            padding: 18,
-            elevation: 6,
-            borderLeftWidth: 6,
-            borderLeftColor:
-              result.urgency === "danger"
-                ? "#FF4D4F"
-                : result.urgency === "warning"
-                ? "#FAAD14"
-                : "#52C41A"
-          }}
-        >
 
-          {/* HEADER */}
-          <Text style={{ fontSize: 22, fontWeight: "bold" }}>
-            {result.problem}
-          </Text>
-
-          <Text
-            style={{
-              marginTop: 4,
-              fontWeight: "bold",
-              color:
-                result.urgency === "danger"
-                  ? "#FF4D4F"
-                  : result.urgency === "warning"
-                  ? "#FAAD14"
-                  : "#52C41A"
-            }}
-          >
-            {result.urgency.toUpperCase()}
-          </Text>
-
-          {/* WHAT TO DO */}
-          <View style={{ marginTop: 15 }}>
-            <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
-              What to do
-            </Text>
-            <Text style={{ color: "#333", lineHeight: 20 }}>
-              {result.what_to_do}
-            </Text>
-          </View>
-
-          {/* AVOID */}
-          <View style={{ marginTop: 15 }}>
-            <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
-              Avoid
-            </Text>
-            <Text style={{ color: "#333", lineHeight: 20 }}>
-              {result.avoid}
-            </Text>
-          </View>
-
-          {/* EXERCISES */}
-          <View style={{ marginTop: 15 }}>
-            <Text style={{ fontWeight: "bold", marginBottom: 8 }}>
-              Recommended Exercises
-            </Text>
-
-            {result.exercises.map((ex, i) => (
-              <View
-                key={i}
-                style={{
-                  backgroundColor: "#F6F8FF",
-                  padding: 10,
-                  borderRadius: 10,
-                  marginBottom: 8
-                }}
-              >
-                <Text style={{ fontWeight: "500" }}>
-                  • {ex.name}
-                </Text>
-                <Text style={{ fontSize: 12, color: "#666" }}>
-                  Duration: {ex.duration} min
-                </Text>
-              </View>
-            ))}
-          </View>
-
-        </View>
-      )}
+      {/* RESULT */}
+      {result && <ResultCard result={result} />}
 
     </ScrollView>
   );

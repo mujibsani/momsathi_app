@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import SymptomScreen from "./src/screens/SymptomScreen";
+import HistoryScreen from "./src/screens/HistoryScreen";
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -27,6 +29,9 @@ function MainTabs() {
           if (route.name === "Symptoms") {
             iconName = "heart-outline";
           }
+          if (route.name === "History") {
+            iconName = "time-outline";
+          }
 
           return (
             <Ionicons
@@ -43,6 +48,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Symptoms" component={SymptomScreen} />
+      <Tab.Screen name="History" component={HistoryScreen}/>
     </Tab.Navigator>
   );
 }

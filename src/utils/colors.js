@@ -1,5 +1,10 @@
 export const getUrgencyColor = (urgency) => {
-  if (urgency === "danger") return "#FF4D4F";   // red
-  if (urgency === "warning") return "#FAAD14";  // yellow
-  return "#52C41A"; // green
+  switch (urgency) {
+    case "danger":
+      return "#E53935"; // red
+    case "warning":
+      return "#FB8C00"; // orange
+    default:
+      return "#43A047"; // green
+  }
 };
