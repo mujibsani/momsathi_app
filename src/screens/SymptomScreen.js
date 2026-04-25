@@ -7,11 +7,14 @@ import SymptomCard from "../components/SymptomCard";
 import ResultCard from "../components/ResultCard";
 import { saveHistory } from "../services/history";
 
+import { analyzeSymptom } from "../engine/symptomEngine";
+
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [week, setWeek] = useState(null);
 
+  /* ---------------- SYMPTOMS ---------------- */
   const symptoms = [
     { label: "Back Pain", slug: "back-pain", icon: "🦴", category: "Body Pain" },
     { label: "Headache", slug: "headache", icon: "🧠", category: "Pain" },
@@ -46,13 +49,18 @@ export default function SymptomScreen() {
       const res = await API.get(
         `/problems/helper/?problem=${slug}&week=${week}`
       );
-      console.log("API RESULT:", res.data); 
-      setResult(res.data);
+
+      console.log("API RESULT:", res.data);
+
+      // ✅ process with engine
+      const processed = analyzeSymptom(res.data, week);
+
+      setResult(processed);
 
       /* -------- SAVE HISTORY -------- */
-      saveHistory({
-        problem: res.data.problem,
-        urgency: res.data.urgency,
+      await saveHistory({
+        problem: processed.problem,
+        urgency: processed.urgency,
         date: new Date().toLocaleDateString()
       });
 
@@ -82,9 +90,9 @@ export default function SymptomScreen() {
       </Text>
 
       {/* SYMPTOM LIST */}
-      {symptoms.map((item, i) => (
+      {symptoms.map((item) => (
         <SymptomCard
-          key={i}
+          key={item.slug} // ✅ FIXED key
           label={item.label}
           icon={item.icon}
           category={item.category}
