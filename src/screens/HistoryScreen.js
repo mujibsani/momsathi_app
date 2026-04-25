@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Swipeable } from "react-native-gesture-handler";
@@ -28,6 +28,13 @@ export default function HistoryScreen() {
       loadHistory();
     }, [])
   );
+
+  /* ---------------- CLEAN TIMER ON UNMOUNT ---------------- */
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   /* ---------------- DELETE ---------------- */
   const handleDelete = async (id) => {
@@ -70,6 +77,8 @@ export default function HistoryScreen() {
     };
 
     history.forEach((item) => {
+      if (!item?.date) return;
+
       if (item.date === today) groups.today.push(item);
       else if (item.date === yesterday) groups.yesterday.push(item);
       else groups.older.push(item);
@@ -80,9 +89,10 @@ export default function HistoryScreen() {
 
   const groups = groupHistory();
 
-  /* ---------------- ITEM UI ---------------- */
+  /* ---------------- ITEM ---------------- */
   const renderItem = (item) => (
     <Swipeable
+      key={item.id} // ✅ important for gesture stability
       renderRightActions={() => (
         <TouchableOpacity
           onPress={() => handleDelete(item.id)}
@@ -112,9 +122,13 @@ export default function HistoryScreen() {
         }}
       >
         <Text style={{ fontWeight: "bold" }}>{item.problem}</Text>
-        <Text style={{ fontSize: 12, color: "#666" }}>{item.date}</Text>
+
+        <Text style={{ fontSize: 12, color: "#666" }}>
+          {item.date}
+        </Text>
+
         <Text style={{ color: getUrgencyColor(item.urgency) }}>
-          {item.urgency.toUpperCase()}
+          {item.urgency?.toUpperCase()}
         </Text>
       </View>
     </Swipeable>
@@ -122,15 +136,14 @@ export default function HistoryScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-
       <ScrollView style={{ padding: 20, backgroundColor: "#F6F8FF" }}>
-
+        
         {/* TITLE */}
         <Text style={{ fontSize: 22, fontWeight: "bold" }}>
           📊 Symptom History
         </Text>
 
-        {/* EMPTY STATE */}
+        {/* EMPTY */}
         {history.length === 0 && (
           <View style={{ marginTop: 40, alignItems: "center" }}>
             <Text style={{ fontSize: 18, fontWeight: "bold" }}>
@@ -141,9 +154,7 @@ export default function HistoryScreen() {
               Start checking symptoms to build your health timeline
             </Text>
 
-            <Text style={{ marginTop: 15, fontSize: 30 }}>
-              📊
-            </Text>
+            <Text style={{ marginTop: 15, fontSize: 30 }}>📊</Text>
           </View>
         )}
 
@@ -153,9 +164,7 @@ export default function HistoryScreen() {
             <Text style={{ marginTop: 20, fontWeight: "bold" }}>
               🟢 Today
             </Text>
-            {groups.today.map((item) => (
-              <View key={item.id}>{renderItem(item)}</View>
-            ))}
+            {groups.today.map((item) => renderItem(item))}
           </>
         )}
 
@@ -165,9 +174,7 @@ export default function HistoryScreen() {
             <Text style={{ marginTop: 20, fontWeight: "bold" }}>
               🟡 Yesterday
             </Text>
-            {groups.yesterday.map((item) => (
-              <View key={item.id}>{renderItem(item)}</View>
-            ))}
+            {groups.yesterday.map((item) => renderItem(item))}
           </>
         )}
 
@@ -177,9 +184,7 @@ export default function HistoryScreen() {
             <Text style={{ marginTop: 20, fontWeight: "bold" }}>
               🔵 Older
             </Text>
-            {groups.older.map((item) => (
-              <View key={item.id}>{renderItem(item)}</View>
-            ))}
+            {groups.older.map((item) => renderItem(item))}
           </>
         )}
 
@@ -213,7 +218,6 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         </View>
       )}
-
     </View>
   );
 }

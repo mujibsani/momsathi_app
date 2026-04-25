@@ -5,14 +5,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
 import ResultCard from "../components/ResultCard";
-import { saveHistory } from "../services/history";
+// import { saveHistory } from "../services/history";
+import { useAppStore } from "../store/useAppStore";
 
 import { analyzeSymptom } from "../engine/symptomEngine";
+
+
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [week, setWeek] = useState(null);
+  const { addHistory } = useAppStore();
 
   /* ---------------- SYMPTOMS ---------------- */
   const symptoms = [
@@ -38,6 +42,7 @@ export default function SymptomScreen() {
     }
   };
 
+  
   /* ---------------- API CALL ---------------- */
   const checkProblem = async (slug) => {
     if (loading || !week) return;
@@ -58,7 +63,7 @@ export default function SymptomScreen() {
       setResult(processed);
 
       /* -------- SAVE HISTORY -------- */
-      await saveHistory({
+      await addHistory({
         problem: processed.problem,
         urgency: processed.urgency,
         date: new Date().toLocaleDateString()
