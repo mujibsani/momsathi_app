@@ -1,22 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
 import ResultCard from "../components/ResultCard";
-// import { saveHistory } from "../services/history";
+
 import { useAppStore } from "../store/useAppStore";
-
 import { analyzeSymptom } from "../engine/symptomEngine";
-
-
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [week, setWeek] = useState(null);
-  const { addHistory } = useAppStore();
+  const [week, setWeek] = useState(20);
+
+  const addHistory = useAppStore((state) => state.addHistory);
 
   /* ---------------- SYMPTOMS ---------------- */
   const symptoms = [
@@ -29,22 +27,21 @@ export default function SymptomScreen() {
 
   /* ---------------- LOAD WEEK ---------------- */
   useEffect(() => {
+    const loadWeek = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("pregnancy_week");
+        setWeek(saved ? parseInt(saved) : 20);
+      } catch (e) {
+        console.log("Week load error:", e);
+        setWeek(20);
+      }
+    };
+
     loadWeek();
   }, []);
 
-  const loadWeek = async () => {
-    try {
-      const saved = await AsyncStorage.getItem("pregnancy_week");
-      setWeek(saved ? parseInt(saved) : 20);
-    } catch (e) {
-      console.log("Week load error:", e);
-      setWeek(20);
-    }
-  };
-
-  
   /* ---------------- API CALL ---------------- */
-  const checkProblem = async (slug) => {
+  const checkProblem = useCallback(async (slug) => {
     if (loading || !week) return;
 
     setLoading(true);
@@ -55,14 +52,11 @@ export default function SymptomScreen() {
         `/problems/helper/?problem=${slug}&week=${week}`
       );
 
-      console.log("API RESULT:", res.data);
-
-      // ✅ process with engine
       const processed = analyzeSymptom(res.data, week);
 
       setResult(processed);
 
-      /* -------- SAVE HISTORY -------- */
+      // ✅ GLOBAL STATE SAVE
       await addHistory({
         problem: processed.problem,
         urgency: processed.urgency,
@@ -74,7 +68,7 @@ export default function SymptomScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading, week]);
 
   return (
     <ScrollView
@@ -94,10 +88,10 @@ export default function SymptomScreen() {
         Tap a symptom to get instant guidance
       </Text>
 
-      {/* SYMPTOM LIST */}
+      {/* SYMPTOMS */}
       {symptoms.map((item) => (
         <SymptomCard
-          key={item.slug} // ✅ FIXED key
+          key={item.slug}
           label={item.label}
           icon={item.icon}
           category={item.category}
@@ -105,7 +99,7 @@ export default function SymptomScreen() {
         />
       ))}
 
-      {/* WELCOME STATE */}
+      {/* WELCOME */}
       {!loading && !result && (
         <View
           style={{
@@ -125,7 +119,7 @@ export default function SymptomScreen() {
         </View>
       )}
 
-      {/* LOADING STATE */}
+      {/* LOADING */}
       {loading && (
         <View
           style={{

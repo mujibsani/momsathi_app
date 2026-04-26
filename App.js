@@ -1,18 +1,23 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import SymptomScreen from "./src/screens/SymptomScreen";
 import HistoryScreen from "./src/screens/HistoryScreen";
+import WeeklyReportScreen from "./src/screens/WeeklyReportScreen";
+import DashboardScreen from "./src/screens/DashboardScreen";
+
+import { scheduleDailyReminder } from "./src/engine/notificationEngine";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-/* BOTTOM TABS */
+/* ---------------- TABS ---------------- */
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -22,20 +27,14 @@ function MainTabs() {
         tabBarIcon: ({ color, size }) => {
           let iconName = "help-circle-outline";
 
-          if (route.name === "Home") {
-            iconName = "home-outline";
-          } else if (route.name === "Symptoms") {
-            iconName = "heart-outline";
-          } else if (route.name === "History") {
-            iconName = "time-outline";
-          }
+          if (route.name === "Home") iconName = "home-outline";
+          else if (route.name === "Symptoms") iconName = "heart-outline";
+          else if (route.name === "History") iconName = "time-outline";
+          else if (route.name === "Dashboard")
+            iconName = "stats-chart-outline";
 
           return (
-            <Ionicons
-              name={iconName}
-              size={size || 24}
-              color={color}
-            />
+            <Ionicons name={iconName} size={size || 24} color={color} />
           );
         },
 
@@ -46,17 +45,44 @@ function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Symptoms" component={SymptomScreen} />
       <Tab.Screen name="History" component={HistoryScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
     </Tab.Navigator>
   );
 }
 
-/* ROOT APP */
+/* ---------------- ROOT APP ---------------- */
 export default function App() {
+  useEffect(() => {
+    requestPermissions();
+    scheduleDailyReminder();
+  }, []);
+
+  const requestPermissions = async () => {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") {
+      console.log("Notification permission denied");
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Navigator>
+
+          {/* MAIN */}
+          <Stack.Screen
+            name="Main"
+            component={MainTabs}
+            options={{ headerShown: false }}
+          />
+
+          {/* WEEKLY REPORT */}
+          <Stack.Screen
+            name="WeeklyReport"
+            component={WeeklyReportScreen}
+            options={{ title: "Weekly Report" }}
+          />
+
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>
