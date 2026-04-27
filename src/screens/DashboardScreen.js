@@ -1,171 +1,142 @@
-import React, { useEffect, useState } from "react";
-import { TouchableOpacity } from "react-native";
-import { View, Text, ScrollView, Dimensions } from "react-native";
-import { LineChart } from "react-native-chart-kit";
+import React, { useEffect, useState, useMemo } from "react";
+import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 
 import { getHistory } from "../services/history";
-import { useNavigation } from "@react-navigation/native";
+import { analyzeHistory, generateInsights } from "../engine/intelligenceEngine";
+import { generateAlerts } from "../engine/alertEngine";
 
-const screenWidth = Dimensions.get("window").width;
+import { useNavigation } from "@react-navigation/native";
 
 export default function DashboardScreen() {
   const [history, setHistory] = useState([]);
   const navigation = useNavigation();
 
+  /* ---------------- LOAD ---------------- */
   useEffect(() => {
+    const load = async () => {
+      const data = await getHistory();
+      setHistory(data || []);
+    };
+
     load();
   }, []);
 
-  const load = async () => {
-    const data = await getHistory();
-    setHistory(data || []);
-  };
+  /* ---------------- AI ---------------- */
+  const analysis = useMemo(() => analyzeHistory(history), [history]);
+  const insights = useMemo(() => generateInsights(analysis), [analysis]);
+  const alerts = useMemo(() => generateAlerts(history), [history]);
 
-  /* ---------------- BASIC STATS ---------------- */
-
+  /* ---------------- STATS ---------------- */
   const total = history.length;
 
-  const highUrgency = history.filter(
+  const highRisk = history.filter(
     (i) => i.urgency === "high"
   ).length;
 
-  const normalUrgency = history.filter(
-    (i) => i.urgency === "normal"
-  ).length;
+  const score =
+    total === 0 ? 100 : Math.max(100 - highRisk * 20, 30);
 
-  /* ---------------- HEALTH SCORE ---------------- */
-
-  const healthScore =
-    total === 0 ? 100 : Math.max(100 - highUrgency * 15, 40);
-
-  /* ---------------- LAST 7 DAYS DATA ---------------- */
-
-  const getLast7DaysData = () => {
-    const days = [];
-    const counts = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-
-      const label = `${d.getDate()}/${d.getMonth() + 1}`;
-      days.push(label);
-
-      const count = history.filter(
-        (item) =>
-          item.date === d.toLocaleDateString()
-      ).length;
-
-      counts.push(count);
-    }
-
-    return { days, counts };
-  };
-
-  const chartData = getLast7DaysData();
-
+  /* ---------------- UI ---------------- */
   return (
-    <ScrollView
-      style={{
-        flex: 1,
-        padding: 20,
-        backgroundColor: "#F6F8FF"
-      }}
-    >
+    <ScrollView style={{ flex: 1, padding: 20, backgroundColor: "#F6F8FF" }}>
+      
+      {/* HEADER */}
       <Text style={{ fontSize: 22, fontWeight: "bold" }}>
         📊 Health Dashboard
       </Text>
 
-      {/* LINE CHART */}
-      <View style={{ marginTop: 20 }}>
-        <Text style={{ marginBottom: 10, fontWeight: "bold" }}>
-          📈 Last 7 Days Activity
-        </Text>
-
-        <LineChart
-          data={{
-            labels: chartData.days,
-            datasets: [{ data: chartData.counts }]
-          }}
-          width={screenWidth - 40}
-          height={220}
-          yAxisInterval={1}
-          chartConfig={{
-            backgroundGradientFrom: "#fff",
-            backgroundGradientTo: "#fff",
-            decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(45, 58, 140, ${opacity})`,
-            labelColor: () => "#333"
-          }}
-          bezier
-          style={{ borderRadius: 12 }}
-        />
+      {/* SCORE CARD */}
+      <View style={card}>
+        <Text style={title}>Health Score</Text>
+        <Text style={value}>{score}/100</Text>
       </View>
 
-      {/* STATS */}
+      {/* TOTAL */}
       <View style={card}>
-        <Text style={title}>Total Logs</Text>
+        <Text style={title}>Total Symptoms</Text>
         <Text style={value}>{total}</Text>
       </View>
 
+      {/* HIGH RISK */}
       <View style={card}>
-        <Text style={title}>High Urgency</Text>
-        <Text style={value}>{highUrgency}</Text>
+        <Text style={title}>High Risk Cases</Text>
+        <Text style={value}>{highRisk}</Text>
       </View>
 
-      <View style={card}>
-        <Text style={title}>Normal Urgency</Text>
-        <Text style={value}>{normalUrgency}</Text>
-      </View>
+      {/* ALERT PREVIEW */}
+      {alerts.length > 0 && (
+        <View style={alertBox}>
+          <Text style={{ fontWeight: "bold", marginBottom: 5 }}>
+            🚨 Alerts
+          </Text>
 
-      <View style={card}>
-        <Text style={title}>Health Score</Text>
-        <Text style={value}>{healthScore}/100</Text>
-      </View>
-
-      {/* weekly report  */}
-        <View style={report_style}>
-            <TouchableOpacity
-                onPress={() => navigation.navigate("WeeklyReport")}
-                style={{
-                backgroundColor: "#2D3A8C",
-                padding: 16,
-                borderRadius: 12,
-                alignItems: "center",
-                elevation: 3,
-                
-                }}
-            >
-                <Text style={{ color: "white", fontWeight: "bold", fontSize: 16 }}>
-                📅 View Weekly Report
-                </Text>
-            </TouchableOpacity>
+          {alerts.slice(0, 2).map((a, i) => (
+            <Text key={i}>• {a}</Text>
+          ))}
         </View>
+      )}
+
+      {/* INSIGHT PREVIEW */}
+      {insights.length > 0 && (
+        <View style={insightBox}>
+          <Text style={{ fontWeight: "bold", marginBottom: 5 }}>
+            🧠 AI Insight
+          </Text>
+
+          <Text>{insights[0]}</Text>
+        </View>
+      )}
+
+      {/* ACTION BUTTON */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("WeeklyReport")}
+        style={button}
+      >
+        <Text style={{ color: "white", fontWeight: "bold" }}>
+          📅 View Weekly Report
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 /* ---------------- STYLES ---------------- */
 
-const report_style = {
-  marginTop: 15,
-  padding: 20,
-  borderRadius: 12
-};
-
 const card = {
   marginTop: 15,
-  padding: 20,
+  padding: 18,
   backgroundColor: "white",
   borderRadius: 12
 };
+
+const alertBox = {
+  marginTop: 15,
+  padding: 15,
+  backgroundColor: "#FFECEC",
+  borderRadius: 12
+};
+
+const insightBox = {
+  marginTop: 15,
+  padding: 15,
+  backgroundColor: "#FFF7E6",
+  borderRadius: 12
+};
+
+const button = {
+  marginTop: 25,
+  backgroundColor: "#2D3A8C",
+  padding: 15,
+  borderRadius: 12,
+  alignItems: "center"
+};
+
 const title = {
-  fontSize: 14,
   color: "#666"
 };
 
 const value = {
-  fontSize: 20,
+  fontSize: 22,
   fontWeight: "bold",
   marginTop: 5
 };

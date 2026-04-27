@@ -1,69 +1,102 @@
-export const analyzeHistory = (history) => {
-  if (!history || history.length === 0) return null;
+/* ---------------- ANALYZE HISTORY ---------------- */
+export const analyzeHistory = (history = []) => {
+  const safe = Array.isArray(history) ? history : [];
 
-  const countMap = {};
-  const urgencyMap = {
-    danger: 0,
-    warning: 0,
-    normal: 0
-  };
+  const total = safe.length;
 
-  history.forEach((item) => {
-    // count symptoms
-    countMap[item.problem] = (countMap[item.problem] || 0) + 1;
+  const high = safe.filter(i => i?.urgency === "high").length;
+  const medium = safe.filter(i => i?.urgency === "medium").length;
+  const low = safe.filter(i => i?.urgency === "low").length;
 
-    // count urgency
-    if (item.urgency) {
-      urgencyMap[item.urgency]++;
-    }
-  });
+  // recent trend
+  const last5 = safe.slice(0, 5);
 
-  // find most repeated symptom
-  let topSymptom = null;
-  let max = 0;
-
-  Object.keys(countMap).forEach((key) => {
-    if (countMap[key] > max) {
-      max = countMap[key];
-      topSymptom = key;
-    }
-  });
+  const trend =
+    last5.filter(i => i?.urgency === "high").length >= 2
+      ? "worsening"
+      : "stable";
 
   return {
-    total: history.length,
-    mostCommon: topSymptom,
-    count: max,
-    urgency: urgencyMap
+    total,
+    high,
+    medium,
+    low,
+    trend
   };
 };
-export const generateInsights = (data) => {
-  if (!data) return [];
 
+/* ---------------- INSIGHTS ENGINE ---------------- */
+export const generateInsights = (analysis) => {
   const insights = [];
 
-  if (data.count >= 3) {
-    insights.push(
-      `⚠️ ${data.mostCommon} repeated ${data.count} times`
-    );
+  if (!analysis) return insights;
+
+  if (analysis.total === 0) {
+    insights.push("You have a clean health history so far.");
+    return insights;
   }
 
-  if (data.urgency.danger > 0) {
-    insights.push(
-      `🚨 ${data.urgency.danger} high-risk symptom detected`
-    );
+  if (analysis.high > 2) {
+    insights.push("You had multiple high-risk symptoms recently.");
   }
 
-  if (data.urgency.warning > 2) {
-    insights.push(
-      `⚠️ Multiple warning-level symptoms observed`
-    );
+  if (analysis.trend === "worsening") {
+    insights.push("Your symptoms trend is increasing — monitor closely.");
+  } else {
+    insights.push("Your symptom pattern looks stable.");
   }
 
-  if (data.total >= 5) {
-    insights.push(
-      `📊 You have logged ${data.total} symptoms`
-    );
+  if (analysis.low > analysis.high) {
+    insights.push("Most symptoms are mild — good sign.");
   }
 
   return insights;
+};
+
+/* ---------------- ALERT ENGINE ---------------- */
+export const generateAlerts = (history = []) => {
+  const alerts = [];
+
+  if (!history || history.length === 0) return alerts;
+
+  const last = history[0];
+
+  if (last?.urgency === "high") {
+    alerts.push("Recent high-risk symptom detected");
+  }
+
+  const highCount = history.filter(i => i?.urgency === "high").length;
+
+  if (highCount >= 3) {
+    alerts.push("Repeated high-risk symptoms detected");
+  }
+
+  return alerts;
+};
+
+/* ---------------- PREDICTION ENGINE ---------------- */
+export const generatePredictions = (history = []) => {
+  const predictions = [];
+
+  if (!history || history.length === 0) return predictions;
+
+  const high = history.filter(i => i?.urgency === "high").length;
+
+  const stress = history.filter(i =>
+    i?.problem?.toLowerCase().includes("stress")
+  ).length;
+
+  if (high >= 3) {
+    predictions.push("Possible symptom escalation risk in next days");
+  }
+
+  if (stress >= 2) {
+    predictions.push("Stress pattern may affect physical symptoms");
+  }
+
+  if (history.length > 10) {
+    predictions.push("Long-term monitoring recommended");
+  }
+
+  return predictions;
 };

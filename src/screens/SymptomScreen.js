@@ -6,7 +6,7 @@ import API from "../services/api";
 import SymptomCard from "../components/SymptomCard";
 import ResultCard from "../components/ResultCard";
 
-import { useAppStore } from "../store/useAppStore";
+import { useHistoryStore } from "../store/useHistoryStore";
 import { analyzeSymptom } from "../engine/symptomEngine";
 
 export default function SymptomScreen() {
@@ -14,8 +14,8 @@ export default function SymptomScreen() {
   const [loading, setLoading] = useState(false);
   const [week, setWeek] = useState(20);
 
-  const addHistory = useAppStore((state) => state.addHistory);
-
+  // const addHistory = useAppStore((state) => state.addHistory);
+  const addHistory = useHistoryStore((state)=> state.addHistory);
   /* ---------------- SYMPTOMS ---------------- */
   const symptoms = [
     { label: "Back Pain", slug: "back-pain", icon: "🦴", category: "Body Pain" },
