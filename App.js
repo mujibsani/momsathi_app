@@ -14,10 +14,19 @@ import DashboardScreen from "./src/screens/DashboardScreen";
 
 import { scheduleDailyReminder } from "./src/engine/notificationEngine";
 
+/* ---------------- GLOBAL NOTIFICATION HANDLER ---------------- */
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-/* ---------------- TABS ---------------- */
+/* ---------------- BOTTOM TABS ---------------- */
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -30,8 +39,7 @@ function MainTabs() {
           if (route.name === "Home") iconName = "home-outline";
           else if (route.name === "Symptoms") iconName = "heart-outline";
           else if (route.name === "History") iconName = "time-outline";
-          else if (route.name === "Dashboard")
-            iconName = "stats-chart-outline";
+          else if (route.name === "Dashboard") iconName = "stats-chart-outline";
 
           return (
             <Ionicons name={iconName} size={size || 24} color={color} />
@@ -39,7 +47,7 @@ function MainTabs() {
         },
 
         tabBarActiveTintColor: "#2D3A8C",
-        tabBarInactiveTintColor: "gray"
+        tabBarInactiveTintColor: "gray",
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
@@ -53,14 +61,28 @@ function MainTabs() {
 /* ---------------- ROOT APP ---------------- */
 export default function App() {
   useEffect(() => {
-    requestPermissions();
-    scheduleDailyReminder();
+    initNotifications();
   }, []);
 
-  const requestPermissions = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== "granted") {
-      console.log("Notification permission denied");
+  const initNotifications = async () => {
+    try {
+      // 🔥 SDK 55 SAFE DELAY (important)
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const { status } = await Notifications.requestPermissionsAsync();
+
+      if (status !== "granted") {
+        console.log("❌ Notification permission denied");
+        return;
+      }
+
+      // 🔥 extra safety delay before scheduling
+      setTimeout(async () => {
+        await scheduleDailyReminder();
+      }, 1500);
+
+    } catch (error) {
+      console.log("❌ Notification init error:", error);
     }
   };
 
@@ -68,8 +90,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
         <Stack.Navigator>
-
-          {/* MAIN */}
+          {/* MAIN APP */}
           <Stack.Screen
             name="Main"
             component={MainTabs}
@@ -82,7 +103,6 @@ export default function App() {
             component={WeeklyReportScreen}
             options={{ title: "Weekly Report" }}
           />
-
         </Stack.Navigator>
       </NavigationContainer>
     </GestureHandlerRootView>

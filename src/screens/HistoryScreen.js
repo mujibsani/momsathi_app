@@ -31,14 +31,26 @@ import {
 
 import { generateAlerts } from "../engine/alertEngine";
 import { generatePredictions } from "../engine/predictionEngine";
-
 import { triggerSmartAlert } from "../engine/notificationEngine";
+
+/* ---------------- COLORS ---------------- */
+const COLORS = {
+  bg: "#F6F8FF",
+  card: "#FFFFFF",
+  alert: "#FFECEC",
+  insight: "#FFF7E6",
+  predict: "#E8F5E9",
+  primary: "#2D3A8C",
+  text: "#222",
+  subtext: "#666"
+};
 
 export default function HistoryScreen() {
   const [history, setHistory] = useState([]);
   const [undoItem, setUndoItem] = useState(null);
 
   const timerRef = useRef(null);
+  const lastAlertRef = useRef(null);
 
   /* ---------------- LOAD ---------------- */
   const loadHistory = useCallback(async () => {
@@ -59,11 +71,28 @@ export default function HistoryScreen() {
     };
   }, []);
 
-  /* ---------------- SMART ALERT ---------------- */
+  /* ---------------- FIXED SMART ALERT SYSTEM ---------------- */
   useEffect(() => {
-    if (history.length > 0) {
-      triggerSmartAlert(history);
-    }
+    const runSmartAlert = async () => {
+      try {
+        if (!history || history.length === 0) return;
+
+        // unique key to avoid duplicate notifications
+        const key = history.length + "_" + history[0]?.date;
+
+        if (lastAlertRef.current === key) return;
+
+        lastAlertRef.current = key;
+
+        // ✅ IMPORTANT: pass FULL history (correct input)
+        await triggerSmartAlert(history);
+
+      } catch (e) {
+        console.log("Smart alert error:", e);
+      }
+    };
+
+    runSmartAlert();
   }, [history]);
 
   /* ---------------- DELETE ---------------- */
@@ -77,10 +106,7 @@ export default function HistoryScreen() {
     setUndoItem(item);
 
     if (timerRef.current) clearTimeout(timerRef.current);
-
-    timerRef.current = setTimeout(() => {
-      setUndoItem(null);
-    }, 5000);
+    timerRef.current = setTimeout(() => setUndoItem(null), 5000);
   };
 
   /* ---------------- UNDO ---------------- */
@@ -89,11 +115,10 @@ export default function HistoryScreen() {
 
     const updated = await restoreHistoryItem(undoItem);
     setHistory(updated);
-
     setUndoItem(null);
   };
 
-  /* ---------------- GROUP HISTORY ---------------- */
+  /* ---------------- GROUP ---------------- */
   const groups = useMemo(() => {
     const today = new Date().toLocaleDateString();
 
@@ -101,11 +126,7 @@ export default function HistoryScreen() {
     y.setDate(y.getDate() - 1);
     const yesterday = y.toLocaleDateString();
 
-    const result = {
-      today: [],
-      yesterday: [],
-      older: []
-    };
+    const result = { today: [], yesterday: [], older: [] };
 
     (history || []).forEach((item) => {
       if (!item?.date) return;
@@ -118,25 +139,40 @@ export default function HistoryScreen() {
     return result;
   }, [history]);
 
-  /* ---------------- AI ENGINE ---------------- */
+  /* ---------------- AI ---------------- */
   const analysis = useMemo(() => analyzeHistory(history), [history]);
   const insights = useMemo(() => generateInsights(analysis), [analysis]);
   const alerts = useMemo(() => generateAlerts(history), [history]);
   const predictions = useMemo(() => generatePredictions(history), [history]);
 
+  /* ---------------- CARD ---------------- */
+  const Card = ({ children, bg = COLORS.card }) => (
+    <View
+      style={{
+        backgroundColor: bg,
+        borderRadius: 16,
+        padding: 16,
+        marginTop: 15,
+        elevation: 3
+      }}
+    >
+      {children}
+    </View>
+  );
+
   /* ---------------- ITEM ---------------- */
   const renderItem = (item) => (
     <Swipeable
+      key={item.id}
       renderRightActions={() => (
         <TouchableOpacity
           onPress={() => handleDelete(item.id)}
           style={{
             backgroundColor: "#E53935",
             justifyContent: "center",
-            alignItems: "flex-end",
-            padding: 20,
-            marginTop: 10,
-            borderRadius: 12
+            paddingHorizontal: 20,
+            borderRadius: 16,
+            marginTop: 10
           }}
         >
           <Text style={{ color: "white", fontWeight: "bold" }}>
@@ -145,92 +181,114 @@ export default function HistoryScreen() {
         </TouchableOpacity>
       )}
     >
-      <View
-        style={{
-          marginTop: 10,
-          padding: 15,
-          backgroundColor: "white",
-          borderRadius: 12,
-          borderLeftWidth: 5,
-          borderLeftColor: getUrgencyColor(item?.urgency)
-        }}
-      >
-        <Text style={{ fontWeight: "bold" }}>
-          {item?.problem}
+      <Card>
+        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+          {item.problem}
         </Text>
 
-        <Text style={{ fontSize: 12, color: "#666" }}>
-          {item?.date}
+        <Text style={{ color: COLORS.subtext, marginTop: 4 }}>
+          {item.date}
         </Text>
 
-        <Text style={{ color: getUrgencyColor(item?.urgency) }}>
-          {(item?.urgency || "").toUpperCase()}
+        <Text
+          style={{
+            marginTop: 6,
+            color: getUrgencyColor(item.urgency),
+            fontWeight: "bold"
+          }}
+        >
+          {(item.urgency || "").toUpperCase()}
         </Text>
-      </View>
+      </Card>
     </Swipeable>
   );
 
   /* ---------------- UI ---------------- */
   return (
-    <View style={{ flex: 1 }}>
-      <ScrollView style={{ padding: 20, backgroundColor: "#F6F8FF" }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <ScrollView style={{ padding: 20 }}>
 
-        <Text style={{ fontSize: 22, fontWeight: "bold" }}>
+        {/* HEADER */}
+        <Text style={{ fontSize: 24, fontWeight: "bold", color: COLORS.text }}>
           📊 Symptom History
         </Text>
 
         {/* ALERTS */}
         {alerts.length > 0 && (
-          <View style={boxAlert}>
-            <Text style={title}>🚨 Smart Alerts</Text>
+          <Card bg={COLORS.alert}>
+            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+              🚨 Smart Alerts
+            </Text>
             {alerts.map((a, i) => (
-              <Text key={`alert-${i}`}>{a}</Text>
+              <Text key={i} style={{ marginTop: 6 }}>
+                • {a}
+              </Text>
             ))}
-          </View>
+          </Card>
         )}
 
         {/* INSIGHTS */}
         {insights.length > 0 && (
-          <View style={boxInsight}>
-            <Text style={title}>🧠 Insights</Text>
+          <Card bg={COLORS.insight}>
+            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+              🧠 Insights
+            </Text>
             {insights.map((i, idx) => (
-              <Text key={`ins-${idx}`}>{i}</Text>
+              <Text key={idx} style={{ marginTop: 6 }}>
+                • {i}
+              </Text>
             ))}
-          </View>
+          </Card>
         )}
 
         {/* PREDICTIONS */}
         {predictions.length > 0 && (
-          <View style={boxPredict}>
-            <Text style={title}>🔮 Predictions</Text>
+          <Card bg={COLORS.predict}>
+            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+              🔮 Predictions
+            </Text>
             {predictions.map((p, i) => (
-              <Text key={`pred-${i}`}>{p}</Text>
+              <Text key={i} style={{ marginTop: 6 }}>
+                • {p}
+              </Text>
             ))}
-          </View>
+          </Card>
         )}
 
         {/* EMPTY */}
         {history.length === 0 && (
-          <View style={{ marginTop: 40, alignItems: "center" }}>
-            <Text style={{ fontSize: 18, fontWeight: "bold" }}>
-              🩺 No History Yet
+          <Card>
+            <Text style={{ textAlign: "center", fontSize: 16 }}>
+              🩺 No history yet
             </Text>
-            <Text style={{ marginTop: 8, color: "#666", textAlign: "center" }}>
-              Start checking symptoms to build your health timeline
-            </Text>
-          </View>
+          </Card>
         )}
 
         {/* GROUPS */}
-        {groups.today.map(renderItem)}
+        {groups.today.length > 0 && (
+          <>
+            <Text style={sectionTitle}>🟢 Today</Text>
+            {groups.today.map(renderItem)}
+          </>
+        )}
 
-        {groups.yesterday.map(renderItem)}
+        {groups.yesterday.length > 0 && (
+          <>
+            <Text style={sectionTitle}>🟡 Yesterday</Text>
+            {groups.yesterday.map(renderItem)}
+          </>
+        )}
 
-        {groups.older.map(renderItem)}
+        {groups.older.length > 0 && (
+          <>
+            <Text style={sectionTitle}>🔵 Older</Text>
+            {groups.older.map(renderItem)}
+          </>
+        )}
 
       </ScrollView>
 
-      {/* UNDO */}
+      {/* UNDO BAR */}
       {undoItem && (
         <View style={undoBar}>
           <Text style={{ color: "white" }}>
@@ -249,30 +307,12 @@ export default function HistoryScreen() {
 }
 
 /* ---------------- STYLES ---------------- */
-const boxAlert = {
-  marginTop: 15,
-  padding: 15,
-  backgroundColor: "#FFECEC",
-  borderRadius: 12
-};
 
-const boxInsight = {
-  marginTop: 15,
-  padding: 15,
-  backgroundColor: "#FFF7E6",
-  borderRadius: 12
-};
-
-const boxPredict = {
-  marginTop: 15,
-  padding: 15,
-  backgroundColor: "#E8F5E9",
-  borderRadius: 12
-};
-
-const title = {
+const sectionTitle = {
+  marginTop: 20,
   fontWeight: "bold",
-  marginBottom: 5
+  fontSize: 14,
+  color: "#444"
 };
 
 const undoBar = {
