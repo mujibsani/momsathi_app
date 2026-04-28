@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AppContainer from "../components/AppContainer";
 
 import API from "../services/api";
 import ResultCard from "../components/ResultCard";
@@ -80,6 +81,7 @@ export default function SymptomScreen() {
   );
 
   return (
+    <AppContainer>
     <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
       {/* HEADER */}
@@ -137,5 +139,6 @@ export default function SymptomScreen() {
       )}
 
     </ScrollView>
+    </AppContainer>
   );
 }

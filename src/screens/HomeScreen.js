@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import AppContainer from "../components/AppContainer";
 
 const COLORS = {
   bg: "#F6F8FF",
@@ -49,6 +50,7 @@ export default function HomeScreen({ navigation }) {
   );
 
   return (
+    <AppContainer>
     <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
       {/* HEADER */}
@@ -129,5 +131,6 @@ export default function HomeScreen({ navigation }) {
       </TouchableOpacity>
 
     </ScrollView>
+    </AppContainer>
   );
 }

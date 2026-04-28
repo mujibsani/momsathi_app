@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import AppContainer from "../components/AppContainer";
 
 import { getHistory } from "../services/history";
 import { analyzeHistory, generateInsights } from "../engine/intelligenceEngine";
@@ -64,6 +65,7 @@ export default function DashboardScreen() {
   );
 
   return (
+    <AppContainer>
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <ScrollView style={{ padding: 20 }}>
 
@@ -176,5 +178,6 @@ export default function DashboardScreen() {
 
       </ScrollView>
     </View>
+    </AppContainer>
   );
 }

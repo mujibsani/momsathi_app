@@ -29,6 +29,7 @@ import {
   generateInsights
 } from "../engine/intelligenceEngine";
 
+import AppContainer from "../components/AppContainer";
 import { generateAlerts } from "../engine/alertEngine";
 import { generatePredictions } from "../engine/predictionEngine";
 import { triggerSmartAlert } from "../engine/notificationEngine";
@@ -205,6 +206,7 @@ export default function HistoryScreen() {
 
   /* ---------------- UI ---------------- */
   return (
+    <AppContainer>
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
       <ScrollView style={{ padding: 20 }}>
 
@@ -303,6 +305,7 @@ export default function HistoryScreen() {
         </View>
       )}
     </View>
+    </AppContainer>
   );
 }
 

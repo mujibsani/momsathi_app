@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, ScrollView } from "react-native";
+import AppContainer from "../components/AppContainer";
 
 import { getHistory } from "../services/history";
 import {
@@ -104,6 +105,7 @@ export default function WeeklyReportScreen() {
 
   /* ---------------- UI ---------------- */
   return (
+    <AppContainer>
     <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
       {/* HEADER */}
@@ -213,6 +215,7 @@ export default function WeeklyReportScreen() {
       </Card>
 
     </ScrollView>
+    </AppContainer>
   );
 }
 
