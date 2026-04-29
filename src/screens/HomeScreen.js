@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Alert
+} from "react-native";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppContainer from "../components/AppContainer";
+
+import { logoutUser } from "../services/authService";
 
 const COLORS = {
   bg: "#F6F8FF",
   card: "#FFFFFF",
   primary: "#2D3A8C",
   success: "#4CAF50",
+  danger: "#E53935",
   text: "#222",
   subtext: "#666"
 };
@@ -35,6 +45,38 @@ export default function HomeScreen({ navigation }) {
     return "3rd Trimester";
   };
 
+  /* ---------------- LOGOUT ---------------- */
+  const handleLogout = async () => {
+    try {
+      Alert.alert(
+        "Logout",
+        "Do you want to logout from this device?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Logout",
+            style: "destructive",
+            onPress: async () => {
+              await logoutUser();
+              Alert.alert("Logged out", "You have been logged out");
+
+              // optional: clear local data
+              await AsyncStorage.clear();
+
+              // optional: go to login screen if navigation exists
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Auth" }]
+              });
+            }
+          }
+        ]
+      );
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
   const Card = ({ children }) => (
     <View
       style={{
@@ -51,86 +93,103 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <AppContainer>
-    <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
-      {/* HEADER */}
-      <Text style={{ fontSize: 28, fontWeight: "bold", color: COLORS.primary }}>
-        🤱 MomSathi
-      </Text>
-
-      <Text style={{ color: COLORS.subtext, marginTop: 5 }}>
-        Pregnancy care companion
-      </Text>
-
-      {/* STATUS CARD */}
-      <Card>
-        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-          Pregnancy Status
+        {/* HEADER */}
+        <Text style={{ fontSize: 28, fontWeight: "bold", color: COLORS.primary }}>
+          🤱 Nurtura
         </Text>
 
-        <Text style={{ marginTop: 8, color: COLORS.subtext }}>
-          Week: {week}
+        <Text style={{ color: COLORS.subtext, marginTop: 5 }}>
+          Pregnancy care companion
         </Text>
 
-        <Text style={{ marginTop: 6, color: COLORS.success, fontWeight: "bold" }}>
-          {getTrimester(week)}
-        </Text>
-      </Card>
-
-      {/* ACTION CARD */}
-      <Card>
-        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-          Weekly Progress
-        </Text>
-
-        <Text style={{ marginTop: 6, color: COLORS.subtext }}>
-          Update your pregnancy week for better AI guidance
-        </Text>
-
+        {/* LOGOUT BUTTON */}
         <TouchableOpacity
-          onPress={() => saveWeek(week + 1)}
+          onPress={handleLogout}
           style={{
-            marginTop: 12,
-            backgroundColor: COLORS.primary,
-            padding: 12,
-            borderRadius: 12
+            marginTop: 10,
+            alignSelf: "flex-end",
+            backgroundColor: COLORS.danger,
+            paddingVertical: 6,
+            paddingHorizontal: 12,
+            borderRadius: 10
           }}
         >
-          <Text style={{ color: "white", textAlign: "center" }}>
-            + Increase Week
+          <Text style={{ color: "white", fontWeight: "bold" }}>
+            Logout
           </Text>
         </TouchableOpacity>
-      </Card>
 
-      {/* INFO CARD */}
-      <Card>
-        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-          AI Health Support
-        </Text>
+        {/* STATUS CARD */}
+        <Card>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            Pregnancy Status
+          </Text>
 
-        <Text style={{ marginTop: 6, color: COLORS.subtext }}>
-          Get personalized pregnancy advice, safe exercises and symptom help.
-        </Text>
-      </Card>
+          <Text style={{ marginTop: 8, color: COLORS.subtext }}>
+            Week: {week}
+          </Text>
 
-      {/* CTA */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate("Symptoms")}
-        style={{
-          marginTop: 25,
-          backgroundColor: COLORS.success,
-          padding: 16,
-          borderRadius: 16,
-          alignItems: "center",
-          elevation: 3
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "bold" }}>
-          🧠 Check Symptoms
-        </Text>
-      </TouchableOpacity>
+          <Text style={{ marginTop: 6, color: COLORS.success, fontWeight: "bold" }}>
+            {getTrimester(week)}
+          </Text>
+        </Card>
 
-    </ScrollView>
+        {/* ACTION CARD */}
+        <Card>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            Weekly Progress
+          </Text>
+
+          <Text style={{ marginTop: 6, color: COLORS.subtext }}>
+            Update your pregnancy week for better AI guidance
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => saveWeek(week + 1)}
+            style={{
+              marginTop: 12,
+              backgroundColor: COLORS.primary,
+              padding: 12,
+              borderRadius: 12
+            }}
+          >
+            <Text style={{ color: "white", textAlign: "center" }}>
+              + Increase Week
+            </Text>
+          </TouchableOpacity>
+        </Card>
+
+        {/* INFO CARD */}
+        <Card>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            AI Health Support
+          </Text>
+
+          <Text style={{ marginTop: 6, color: COLORS.subtext }}>
+            Get personalized pregnancy advice, safe exercises and symptom help.
+          </Text>
+        </Card>
+
+        {/* CTA */}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Symptoms")}
+          style={{
+            marginTop: 25,
+            backgroundColor: COLORS.success,
+            padding: 16,
+            borderRadius: 16,
+            alignItems: "center",
+            elevation: 3
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "bold" }}>
+            🧠 Check Symptoms
+          </Text>
+        </TouchableOpacity>
+
+      </ScrollView>
     </AppContainer>
   );
 }

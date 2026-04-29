@@ -19,8 +19,8 @@ import { Swipeable } from "react-native-gesture-handler";
 import {
   getHistory,
   deleteHistoryItem,
-  restoreHistoryItem
-} from "../services/history";
+  addHistory
+} from "../services/historyApi";
 
 import { getUrgencyColor } from "../utils/colors";
 
@@ -33,6 +33,7 @@ import AppContainer from "../components/AppContainer";
 import { generateAlerts } from "../engine/alertEngine";
 import { generatePredictions } from "../engine/predictionEngine";
 import { triggerSmartAlert } from "../engine/notificationEngine";
+import { subscribeHistory } from "../services/historyApi";
 
 /* ---------------- COLORS ---------------- */
 const COLORS = {
@@ -41,7 +42,6 @@ const COLORS = {
   alert: "#FFECEC",
   insight: "#FFF7E6",
   predict: "#E8F5E9",
-  primary: "#2D3A8C",
   text: "#222",
   subtext: "#666"
 };
@@ -54,17 +54,14 @@ export default function HistoryScreen() {
   const lastAlertRef = useRef(null);
 
   /* ---------------- LOAD ---------------- */
-  const loadHistory = useCallback(async () => {
-    const data = await getHistory();
-    setHistory(data || []);
+  useEffect(() => {
+    const unsubscribe = subscribeHistory((data) => {
+      setHistory(data || []);
+    });
+
+    return () => unsubscribe();
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadHistory();
-    }, [loadHistory])
-  );
-
+  
   /* ---------------- CLEANUP ---------------- */
   useEffect(() => {
     return () => {
@@ -72,22 +69,19 @@ export default function HistoryScreen() {
     };
   }, []);
 
-  /* ---------------- FIXED SMART ALERT SYSTEM ---------------- */
+  /* ---------------- SMART ALERT (ANTI-SPAM) ---------------- */
   useEffect(() => {
     const runSmartAlert = async () => {
       try {
         if (!history || history.length === 0) return;
 
-        // unique key to avoid duplicate notifications
         const key = history.length + "_" + history[0]?.date;
 
         if (lastAlertRef.current === key) return;
 
         lastAlertRef.current = key;
 
-        // ✅ IMPORTANT: pass FULL history (correct input)
         await triggerSmartAlert(history);
-
       } catch (e) {
         console.log("Smart alert error:", e);
       }
@@ -101,7 +95,9 @@ export default function HistoryScreen() {
     const item = history.find((x) => x.id === id);
     if (!item) return;
 
-    const updated = await deleteHistoryItem(id);
+    await deleteHistoryItem(id);
+
+    const updated = await getHistory();
     setHistory(updated);
 
     setUndoItem(item);
@@ -110,12 +106,19 @@ export default function HistoryScreen() {
     timerRef.current = setTimeout(() => setUndoItem(null), 5000);
   };
 
-  /* ---------------- UNDO ---------------- */
+  /* ---------------- UNDO (FIREBASE VERSION) ---------------- */
   const handleUndo = async () => {
     if (!undoItem) return;
 
-    const updated = await restoreHistoryItem(undoItem);
+    await addHistory({
+      problem: undoItem.problem,
+      urgency: undoItem.urgency,
+      date: undoItem.date
+    });
+
+    const updated = await getHistory();
     setHistory(updated);
+
     setUndoItem(null);
   };
 
@@ -207,104 +210,104 @@ export default function HistoryScreen() {
   /* ---------------- UI ---------------- */
   return (
     <AppContainer>
-    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <ScrollView style={{ padding: 20 }}>
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+        <ScrollView style={{ padding: 20 }}>
 
-        {/* HEADER */}
-        <Text style={{ fontSize: 24, fontWeight: "bold", color: COLORS.text }}>
-          📊 Symptom History
-        </Text>
-
-        {/* ALERTS */}
-        {alerts.length > 0 && (
-          <Card bg={COLORS.alert}>
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              🚨 Smart Alerts
-            </Text>
-            {alerts.map((a, i) => (
-              <Text key={i} style={{ marginTop: 6 }}>
-                • {a}
-              </Text>
-            ))}
-          </Card>
-        )}
-
-        {/* INSIGHTS */}
-        {insights.length > 0 && (
-          <Card bg={COLORS.insight}>
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              🧠 Insights
-            </Text>
-            {insights.map((i, idx) => (
-              <Text key={idx} style={{ marginTop: 6 }}>
-                • {i}
-              </Text>
-            ))}
-          </Card>
-        )}
-
-        {/* PREDICTIONS */}
-        {predictions.length > 0 && (
-          <Card bg={COLORS.predict}>
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              🔮 Predictions
-            </Text>
-            {predictions.map((p, i) => (
-              <Text key={i} style={{ marginTop: 6 }}>
-                • {p}
-              </Text>
-            ))}
-          </Card>
-        )}
-
-        {/* EMPTY */}
-        {history.length === 0 && (
-          <Card>
-            <Text style={{ textAlign: "center", fontSize: 16 }}>
-              🩺 No history yet
-            </Text>
-          </Card>
-        )}
-
-        {/* GROUPS */}
-        {groups.today.length > 0 && (
-          <>
-            <Text style={sectionTitle}>🟢 Today</Text>
-            {groups.today.map(renderItem)}
-          </>
-        )}
-
-        {groups.yesterday.length > 0 && (
-          <>
-            <Text style={sectionTitle}>🟡 Yesterday</Text>
-            {groups.yesterday.map(renderItem)}
-          </>
-        )}
-
-        {groups.older.length > 0 && (
-          <>
-            <Text style={sectionTitle}>🔵 Older</Text>
-            {groups.older.map(renderItem)}
-          </>
-        )}
-
-      </ScrollView>
-
-      {/* UNDO BAR */}
-      {undoItem && (
-        <View style={undoBar}>
-          <Text style={{ color: "white" }}>
-            Deleted {undoItem.problem}
+          {/* HEADER */}
+          <Text style={{ fontSize: 24, fontWeight: "bold", color: COLORS.text }}>
+            📊 Symptom History
           </Text>
 
-          <TouchableOpacity onPress={handleUndo}>
-            <Text style={{ color: "#4CAF50", fontWeight: "bold" }}>
-              UNDO
+          {/* ALERTS */}
+          {alerts.length > 0 && (
+            <Card bg={COLORS.alert}>
+              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                🚨 Smart Alerts
+              </Text>
+              {alerts.map((a, i) => (
+                <Text key={i} style={{ marginTop: 6 }}>
+                  • {a}
+                </Text>
+              ))}
+            </Card>
+          )}
+
+          {/* INSIGHTS */}
+          {insights.length > 0 && (
+            <Card bg={COLORS.insight}>
+              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                🧠 Insights
+              </Text>
+              {insights.map((i, idx) => (
+                <Text key={idx} style={{ marginTop: 6 }}>
+                  • {i}
+                </Text>
+              ))}
+            </Card>
+          )}
+
+          {/* PREDICTIONS */}
+          {predictions.length > 0 && (
+            <Card bg={COLORS.predict}>
+              <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                🔮 Predictions
+              </Text>
+              {predictions.map((p, i) => (
+                <Text key={i} style={{ marginTop: 6 }}>
+                  • {p}
+                </Text>
+              ))}
+            </Card>
+          )}
+
+          {/* EMPTY */}
+          {history.length === 0 && (
+            <Card>
+              <Text style={{ textAlign: "center", fontSize: 16 }}>
+                🩺 No history yet
+              </Text>
+            </Card>
+          )}
+
+          {/* GROUPS */}
+          {groups.today.length > 0 && (
+            <>
+              <Text style={sectionTitle}>🟢 Today</Text>
+              {groups.today.map(renderItem)}
+            </>
+          )}
+
+          {groups.yesterday.length > 0 && (
+            <>
+              <Text style={sectionTitle}>🟡 Yesterday</Text>
+              {groups.yesterday.map(renderItem)}
+            </>
+          )}
+
+          {groups.older.length > 0 && (
+            <>
+              <Text style={sectionTitle}>🔵 Older</Text>
+              {groups.older.map(renderItem)}
+            </>
+          )}
+
+        </ScrollView>
+
+        {/* UNDO BAR */}
+        {undoItem && (
+          <View style={undoBar}>
+            <Text style={{ color: "white" }}>
+              Deleted {undoItem.problem}
             </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+
+            <TouchableOpacity onPress={handleUndo}>
+              <Text style={{ color: "#4CAF50", fontWeight: "bold" }}>
+                UNDO
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </AppContainer>
   );
 }

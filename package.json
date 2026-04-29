@@ -21,6 +21,7 @@
     "expo-haptics": "~55.0.14",
     "expo-notifications": "~55.0.20",
     "expo-status-bar": "~55.0.5",
+    "firebase": "^12.12.1",
     "metro": "^0.83.3",
     "react": "19.2.0",
     "react-native": "0.83.6",

@@ -1,1 +1,6 @@
+apk build for client/device testing:  
+eas build --profile development --platform android
+
+
+everyday testing:
 npx expo start --dev-client

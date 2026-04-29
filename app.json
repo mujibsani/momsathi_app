@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "momshathi_app",
+    "name": "Nurtura",
     "slug": "momshathi_app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -29,7 +29,7 @@
       "permissions": [
         "NOTIFICATIONS"
       ],
-      "package": "com.protiksani.momshathi_app"
+      "package": "com.nurtura.health"
     },
     "plugins": [
       "expo-notifications",
@@ -39,6 +39,7 @@
       "eas": {
         "projectId": "70ae4afa-7722-4df4-a070-53ee3c2efe54"
       }
-    }
+    },
+    "owner": "protiksani"
   }
 }

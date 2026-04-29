@@ -1,27 +1,20 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, ScrollView } from "react-native";
+
 import AppContainer from "../components/AppContainer";
+import { getTheme } from "../theme/colors";
 
 import { getHistory } from "../services/history";
 import {
   analyzeHistory,
-  generateInsights
+  generateInsights,
+  generatePredictions,
+  generateSummary
 } from "../engine/intelligenceEngine";
-import { generatePredictions } from "../engine/predictionEngine";
-
-/* ---------------- COLORS ---------------- */
-const COLORS = {
-  bg: "#F6F8FF",
-  card: "#FFFFFF",
-  insight: "#FFF7E6",
-  predict: "#E8F5E9",
-  primary: "#2D3A8C",
-  text: "#222",
-  sub: "#666"
-};
 
 export default function WeeklyReportScreen() {
   const [history, setHistory] = useState([]);
+  const theme = getTheme();
 
   useEffect(() => {
     load();
@@ -75,24 +68,16 @@ export default function WeeklyReportScreen() {
     [weekly]
   );
 
-  /* ---------------- AI SUMMARY ---------------- */
-  const summary = useMemo(() => {
-    if (total === 0) return "No symptoms recorded this week.";
-
-    if (high === 0)
-      return "Your week looks stable. No high-risk symptoms detected.";
-
-    if (high <= 2)
-      return "Some moderate risk detected. Monitor your symptoms carefully.";
-
-    return "Multiple high-risk signals detected. Consider medical consultation.";
-  }, [total, high]);
+  const summary = useMemo(
+    () => generateSummary(analysis, predictions),
+    [analysis, predictions]
+  );
 
   /* ---------------- CARD ---------------- */
-  const Card = ({ children, bg = COLORS.card }) => (
+  const Card = ({ children, bg }) => (
     <View
       style={{
-        backgroundColor: bg,
+        backgroundColor: bg || theme.card,
         padding: 16,
         borderRadius: 16,
         marginTop: 15,
@@ -106,134 +91,166 @@ export default function WeeklyReportScreen() {
   /* ---------------- UI ---------------- */
   return (
     <AppContainer>
-    <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
+      <ScrollView style={{ padding: 20 }}>
 
-      {/* HEADER */}
-      <Text style={{ fontSize: 24, fontWeight: "bold", color: COLORS.text }}>
-        📅 Weekly Report
-      </Text>
-
-      {/* AI SUMMARY */}
-      <Card>
-        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-          🧠 AI Summary
+        {/* HEADER */}
+        <Text
+          style={{
+            fontSize: 24,
+            fontWeight: "bold",
+            color: theme.text
+          }}
+        >
+          📅 Weekly Report
         </Text>
 
-        <Text style={{ marginTop: 8, color: COLORS.sub }}>
-          {summary}
-        </Text>
-      </Card>
-
-      {/* STATS GRID */}
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <Card style={{ flex: 1 }}>
-          <Text style={title}>Score</Text>
-          <Text style={value}>{score}</Text>
-        </Card>
-
-        <Card style={{ flex: 1 }}>
-          <Text style={title}>Total</Text>
-          <Text style={value}>{total}</Text>
-        </Card>
-
-        <Card style={{ flex: 1 }}>
-          <Text style={title}>High</Text>
-          <Text style={value}>{high}</Text>
-        </Card>
-      </View>
-
-      {/* INSIGHTS */}
-      {insights.length > 0 && (
-        <Card bg={COLORS.insight}>
-          <Text style={header}>🧠 Insights</Text>
-
-          {insights.map((item, i) => (
-            <Text key={i} style={{ marginTop: 6 }}>
-              • {item}
-            </Text>
-          ))}
-        </Card>
-      )}
-
-      {/* PREDICTIONS */}
-      {predictions.length > 0 && (
-        <Card bg={COLORS.predict}>
-          <Text style={header}>🔮 Predictions</Text>
-
-          {predictions.map((item, i) => (
-            <Text key={i} style={{ marginTop: 6 }}>
-              • {item}
-            </Text>
-          ))}
-        </Card>
-      )}
-
-      {/* TIMELINE */}
-      <Card>
-        <Text style={header}>📊 Weekly Timeline</Text>
-
-        {weekly.length === 0 && (
-          <Text style={{ marginTop: 8, color: COLORS.sub }}>
-            No activity this week
+        {/* AI SUMMARY */}
+        <Card>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            🧠 AI Summary
           </Text>
+
+          <Text style={{ marginTop: 8, color: theme.subtext }}>
+            {summary}
+          </Text>
+        </Card>
+
+        {/* STATS */}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Card>
+              <Text style={{ color: theme.subtext }}>Score</Text>
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontWeight: "bold",
+                  marginTop: 5,
+                  color: theme.primary
+                }}
+              >
+                {score}
+              </Text>
+            </Card>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Card>
+              <Text style={{ color: theme.subtext }}>Total</Text>
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontWeight: "bold",
+                  marginTop: 5
+                }}
+              >
+                {total}
+              </Text>
+            </Card>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Card>
+              <Text style={{ color: theme.subtext }}>High</Text>
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontWeight: "bold",
+                  marginTop: 5,
+                  color: theme.danger
+                }}
+              >
+                {high}
+              </Text>
+            </Card>
+          </View>
+        </View>
+
+        {/* INSIGHTS */}
+        {insights.length > 0 && (
+          <Card bg={theme.isDark ? "#2A1F0A" : "#FFF7E6"}>
+            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+              🧠 Insights
+            </Text>
+
+            {insights.map((item, i) => (
+              <Text key={i} style={{ marginTop: 6, color: theme.text }}>
+                • {item}
+              </Text>
+            ))}
+          </Card>
         )}
 
-        {weekly.map((item) => (
-          <View
-            key={item.id}
-            style={{
-              marginTop: 10,
-              padding: 12,
-              borderRadius: 12,
-              backgroundColor: "#F1F3FF"
-            }}
-          >
-            <Text style={{ fontWeight: "bold" }}>
-              {item.problem}
+        {/* PREDICTIONS */}
+        {predictions.length > 0 && (
+          <Card bg={theme.isDark ? "#0F2A1F" : "#E8F5E9"}>
+            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+              🔮 Predictions
             </Text>
 
-            <Text style={{ color: COLORS.sub }}>
-              {item.date}
-            </Text>
+            {predictions.map((item, i) => (
+              <Text key={i} style={{ marginTop: 6, color: theme.text }}>
+                • {item}
+              </Text>
+            ))}
+          </Card>
+        )}
 
-            <Text
+        {/* TIMELINE */}
+        <Card>
+          <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+            📊 Weekly Timeline
+          </Text>
+
+          {weekly.length === 0 && (
+            <Text style={{ marginTop: 8, color: theme.subtext }}>
+              No activity this week
+            </Text>
+          )}
+
+          {weekly.map((item) => (
+            <View
+              key={item.id}
               style={{
-                marginTop: 4,
-                fontWeight: "bold",
-                color:
-                  item.urgency === "high"
-                    ? "#E53935"
-                    : item.urgency === "medium"
-                    ? "#FB8C00"
-                    : "#43A047"
+                marginTop: 10,
+                padding: 12,
+                borderRadius: 12,
+                backgroundColor: theme.isDark
+                  ? "#1E293B"
+                  : "#F1F3FF"
               }}
             >
-              {(item.urgency || "").toUpperCase()}
-            </Text>
-          </View>
-        ))}
-      </Card>
+              <Text
+                style={{
+                  fontWeight: "bold",
+                  color: theme.text
+                }}
+              >
+                {item.problem}
+              </Text>
 
-    </ScrollView>
+              <Text style={{ color: theme.subtext }}>
+                {item.date}
+              </Text>
+
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontWeight: "bold",
+                  color:
+                    item.urgency === "high"
+                      ? theme.danger
+                      : item.urgency === "medium"
+                      ? "#FB8C00"
+                      : "#43A047"
+                }}
+              >
+                {(item.urgency || "").toUpperCase()}
+              </Text>
+            </View>
+          ))}
+        </Card>
+
+      </ScrollView>
     </AppContainer>
   );
 }
-
-/* ---------------- TEXT STYLES ---------------- */
-
-const title = {
-  fontSize: 12,
-  color: "#666"
-};
-
-const value = {
-  fontSize: 20,
-  fontWeight: "bold",
-  marginTop: 4
-};
-
-const header = {
-  fontWeight: "bold",
-  marginBottom: 6,
-  fontSize: 16
-};
