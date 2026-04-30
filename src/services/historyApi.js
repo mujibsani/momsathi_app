@@ -7,69 +7,100 @@ import {
   doc,
   onSnapshot,
   query,
-  orderBy
+  orderBy,
+  serverTimestamp
 } from "firebase/firestore";
 
-/* ---------------- GET USER ID ---------------- */
-const getUserId = () => {
-  return auth.currentUser?.uid;
+/* ---------------- GET USER ---------------- */
+const getUser = () => {
+  const user = auth.currentUser;
+  if (!user) {
+    console.log("❌ No authenticated user");
+    return null;
+  }
+  return user;
 };
 
-/* ---------------- COLLECTION REFERENCE ---------------- */
+/* ---------------- HISTORY REF ---------------- */
 const getUserHistoryRef = () => {
-  const uid = getUserId();
-  if (!uid) return null;
+  const user = getUser();
+  if (!user) return null;
 
-  return collection(db, "users", uid, "history");
+  return collection(db, "users", user.uid, "history");
 };
 
 /* ---------------- ADD HISTORY ---------------- */
 export const addHistory = async (item) => {
-  const ref = getUserHistoryRef();
-  if (!ref) return;
+  try {
+    const ref = getUserHistoryRef();
+    if (!ref) throw new Error("No user session");
 
-  await addDoc(ref, {
-    ...item,
-    createdAt: Date.now()
-  });
+    await addDoc(ref, {
+      ...item,
+      createdAt: serverTimestamp()
+    });
+
+  } catch (err) {
+    console.log("❌ addHistory error:", err.message);
+  }
 };
 
 /* ---------------- DELETE HISTORY ---------------- */
 export const deleteHistoryItem = async (id) => {
-  const uid = getUserId();
-  if (!uid) return;
+  try {
+    const user = getUser();
+    if (!user) throw new Error("No user session");
 
-  const ref = doc(db, "users", uid, "history", id);
-  await deleteDoc(ref);
+    const ref = doc(db, "users", user.uid, "history", id);
+    await deleteDoc(ref);
+
+  } catch (err) {
+    console.log("❌ deleteHistory error:", err.message);
+  }
 };
 
 /* ---------------- GET ONCE ---------------- */
 export const getHistory = async () => {
-  const ref = getUserHistoryRef();
-  if (!ref) return [];
+  try {
+    const ref = getUserHistoryRef();
+    if (!ref) return [];
 
-  const q = query(ref, orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
+    const q = query(ref, orderBy("createdAt", "desc"));
+    const snap = await getDocs(q);
 
-  return snap.docs.map(d => ({
-    id: d.id,
-    ...d.data()
-  }));
-};
-
-/* ---------------- REAL-TIME LISTENER ---------------- */
-export const subscribeHistory = (callback) => {
-  const ref = getUserHistoryRef();
-  if (!ref) return () => {};
-
-  const q = query(ref, orderBy("createdAt", "desc"));
-
-  return onSnapshot(q, (snap) => {
-    const data = snap.docs.map(d => ({
+    return snap.docs.map(d => ({
       id: d.id,
       ...d.data()
     }));
 
-    callback(data);
-  });
+  } catch (err) {
+    console.log("❌ getHistory error:", err.message);
+    return [];
+  }
+};
+
+/* ---------------- REALTIME LISTENER ---------------- */
+export const subscribeHistory = (callback) => {
+  try {
+    const ref = getUserHistoryRef();
+    if (!ref) {
+      console.log("❌ subscribeHistory: no user");
+      return () => {};
+    }
+
+    const q = query(ref, orderBy("createdAt", "desc"));
+
+    return onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+
+      callback(data);
+    });
+
+  } catch (err) {
+    console.log("❌ subscribeHistory error:", err.message);
+    return () => {};
+  }
 };

@@ -1,9 +1,9 @@
 import React, {
   useState,
-  useCallback,
   useRef,
   useEffect,
-  useMemo
+  useMemo,
+  useCallback
 } from "react";
 
 import {
@@ -13,13 +13,12 @@ import {
   TouchableOpacity
 } from "react-native";
 
-import { useFocusEffect } from "@react-navigation/native";
 import { Swipeable } from "react-native-gesture-handler";
 
 import {
-  getHistory,
   deleteHistoryItem,
-  addHistory
+  addHistory,
+  subscribeHistory
 } from "../services/historyApi";
 
 import { getUrgencyColor } from "../utils/colors";
@@ -33,7 +32,6 @@ import AppContainer from "../components/AppContainer";
 import { generateAlerts } from "../engine/alertEngine";
 import { generatePredictions } from "../engine/predictionEngine";
 import { triggerSmartAlert } from "../engine/notificationEngine";
-import { subscribeHistory } from "../services/historyApi";
 
 /* ---------------- COLORS ---------------- */
 const COLORS = {
@@ -53,15 +51,22 @@ export default function HistoryScreen() {
   const timerRef = useRef(null);
   const lastAlertRef = useRef(null);
 
-  /* ---------------- LOAD ---------------- */
+  /* ---------------- REAL-TIME LOAD (SAFE) ---------------- */
   useEffect(() => {
+    let isMounted = true;
+
     const unsubscribe = subscribeHistory((data) => {
-      setHistory(data || []);
+      if (isMounted) {
+        setHistory(data || []);
+      }
     });
 
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
-  
+
   /* ---------------- CLEANUP ---------------- */
   useEffect(() => {
     return () => {
@@ -69,36 +74,24 @@ export default function HistoryScreen() {
     };
   }, []);
 
-  /* ---------------- SMART ALERT (ANTI-SPAM) ---------------- */
+  /* ---------------- SMART ALERT ---------------- */
   useEffect(() => {
-    const runSmartAlert = async () => {
-      try {
-        if (!history || history.length === 0) return;
+    if (!history || history.length === 0) return;
 
-        const key = history.length + "_" + history[0]?.date;
+    const key = history.length + "_" + history[0]?.date;
 
-        if (lastAlertRef.current === key) return;
+    if (lastAlertRef.current === key) return;
 
-        lastAlertRef.current = key;
+    lastAlertRef.current = key;
 
-        await triggerSmartAlert(history);
-      } catch (e) {
-        console.log("Smart alert error:", e);
-      }
-    };
-
-    runSmartAlert();
+    triggerSmartAlert(history);
   }, [history]);
 
   /* ---------------- DELETE ---------------- */
-  const handleDelete = async (id) => {
-    const item = history.find((x) => x.id === id);
-    if (!item) return;
+  const handleDelete = async (item) => {
+    if (!item?.id) return;
 
-    await deleteHistoryItem(id);
-
-    const updated = await getHistory();
-    setHistory(updated);
+    await deleteHistoryItem(item.id);
 
     setUndoItem(item);
 
@@ -106,7 +99,7 @@ export default function HistoryScreen() {
     timerRef.current = setTimeout(() => setUndoItem(null), 5000);
   };
 
-  /* ---------------- UNDO (FIREBASE VERSION) ---------------- */
+  /* ---------------- UNDO ---------------- */
   const handleUndo = async () => {
     if (!undoItem) return;
 
@@ -115,9 +108,6 @@ export default function HistoryScreen() {
       urgency: undoItem.urgency,
       date: undoItem.date
     });
-
-    const updated = await getHistory();
-    setHistory(updated);
 
     setUndoItem(null);
   };
@@ -132,7 +122,7 @@ export default function HistoryScreen() {
 
     const result = { today: [], yesterday: [], older: [] };
 
-    (history || []).forEach((item) => {
+    history.forEach((item) => {
       if (!item?.date) return;
 
       if (item.date === today) result.today.push(item);
@@ -165,12 +155,12 @@ export default function HistoryScreen() {
   );
 
   /* ---------------- ITEM ---------------- */
-  const renderItem = (item) => (
+  const renderItem = useCallback((item) => (
     <Swipeable
       key={item.id}
       renderRightActions={() => (
         <TouchableOpacity
-          onPress={() => handleDelete(item.id)}
+          onPress={() => handleDelete(item)}
           style={{
             backgroundColor: "#E53935",
             justifyContent: "center",
@@ -205,7 +195,7 @@ export default function HistoryScreen() {
         </Text>
       </Card>
     </Swipeable>
-  );
+  ), []);
 
   /* ---------------- UI ---------------- */
   return (

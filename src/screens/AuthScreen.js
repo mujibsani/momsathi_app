@@ -1,5 +1,14 @@
-import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView
+} from "react-native";
 
 import { loginUser, registerUser } from "../services/authService";
 
@@ -7,7 +16,6 @@ const COLORS = {
   bg: "#F6F8FF",
   primary: "#2D3A8C",
   card: "#FFFFFF",
-  text: "#222",
   sub: "#666"
 };
 
@@ -15,51 +23,49 @@ export default function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [mode, setMode] = useState("login"); // login | register
+  const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
 
-  /* ---------------- HANDLE AUTH ---------------- */
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  /* ---------------- INPUT REFS ---------------- */
+  const emailRef = useRef(null);
+  const passRef = useRef(null);
+  const confirmRef = useRef(null);
+
+  /* ---------------- AUTH ---------------- */
   const handleAuth = async () => {
     const cleanEmail = email.trim().toLowerCase();
-    const cleanPassword = password.trim();
-    const cleanConfirmPassword = confirmPassword.trim();
+    const cleanPass = password.trim();
+    const cleanConfirm = confirmPassword.trim();
 
-    if (!cleanEmail || !cleanPassword) {
+    if (!cleanEmail || !cleanPass) {
       Alert.alert("Error", "Please fill all fields");
       return;
     }
 
-    /* ---------------- REGISTER VALIDATION ---------------- */
-    if (mode === "register") {
-      if (cleanPassword !== cleanConfirmPassword) {
-        Alert.alert("Error", "Passwords do not match");
-        return;
-      }
+    if (mode === "register" && cleanPass !== cleanConfirm) {
+      Alert.alert("Error", "Passwords do not match");
+      return;
+    }
 
-      if (cleanPassword.length < 6) {
-        Alert.alert("Error", "Password must be at least 6 characters");
-        return;
-      }
+    if (cleanPass.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters");
+      return;
     }
 
     setLoading(true);
 
     try {
       if (mode === "login") {
-        await loginUser(cleanEmail, cleanPassword);
+        await loginUser(cleanEmail, cleanPass);
       } else {
-        await registerUser(cleanEmail, cleanPassword);
+        await registerUser(cleanEmail, cleanPass);
       }
 
       Alert.alert("Success", "Authentication successful");
-
-      // reset fields after success
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-
     } catch (error) {
-      console.log("AUTH ERROR:", error.code, error.message);
       Alert.alert("Auth Error", error.message);
     } finally {
       setLoading(false);
@@ -67,108 +73,144 @@ export default function AuthScreen() {
   };
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: COLORS.bg,
-        justifyContent: "center",
-        padding: 20
-      }}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: COLORS.bg }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* TITLE */}
-      <Text
-        style={{
-          fontSize: 32,
-          fontWeight: "bold",
-          color: COLORS.primary,
-          marginBottom: 10
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          padding: 20
         }}
       >
-        Nurtura
-      </Text>
+        {/* TITLE */}
+        <Text style={{ fontSize: 32, fontWeight: "bold", color: COLORS.primary }}>
+          Nurtura
+        </Text>
 
-      <Text style={{ color: COLORS.sub, marginBottom: 30 }}>
-        AI Pregnancy Health Companion
-      </Text>
+        <Text style={{ color: COLORS.sub, marginBottom: 30 }}>
+          AI Pregnancy Health Companion
+        </Text>
 
-      {/* EMAIL */}
-      <TextInput
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={{
-          backgroundColor: COLORS.card,
-          padding: 14,
-          borderRadius: 12,
-          marginBottom: 12
-        }}
-      />
-
-      {/* PASSWORD */}
-      <TextInput
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        style={{
-          backgroundColor: COLORS.card,
-          padding: 14,
-          borderRadius: 12,
-          marginBottom: 12
-        }}
-      />
-
-      {/* CONFIRM PASSWORD (ONLY REGISTER MODE) */}
-      {mode === "register" && (
+        {/* EMAIL */}
         <TextInput
-          placeholder="Confirm Password"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
+          ref={emailRef}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => passRef.current?.focus()}
           style={{
             backgroundColor: COLORS.card,
             padding: 14,
             borderRadius: 12,
-            marginBottom: 20
+            marginBottom: 12
           }}
         />
-      )}
 
-      {/* BUTTON */}
-      <TouchableOpacity
-        onPress={handleAuth}
-        style={{
-          backgroundColor: COLORS.primary,
-          padding: 14,
-          borderRadius: 12,
-          alignItems: "center"
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "bold" }}>
-          {loading
-            ? "Please wait..."
-            : mode === "login"
-            ? "Login"
-            : "Create Account"}
-        </Text>
-      </TouchableOpacity>
+        {/* PASSWORD */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: COLORS.card,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            marginBottom: 12
+          }}
+        >
+          <TextInput
+            ref={passRef}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            returnKeyType={mode === "register" ? "next" : "done"}
+            blurOnSubmit={false}
+            onSubmitEditing={() =>
+              mode === "register"
+                ? confirmRef.current?.focus()
+                : handleAuth()
+            }
+            style={{ flex: 1, padding: 14 }}
+          />
 
-      {/* SWITCH MODE */}
-      <TouchableOpacity
-        onPress={() => {
-          setMode(mode === "login" ? "register" : "login");
-          setConfirmPassword("");
-        }}
-        style={{ marginTop: 20 }}
-      >
-        <Text style={{ textAlign: "center", color: COLORS.primary }}>
-          {mode === "login"
-            ? "Create new account"
-            : "Already have an account? Login"}
-        </Text>
-      </TouchableOpacity>
-    </View>
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <Text style={{ color: COLORS.primary, fontWeight: "bold" }}>
+              {showPassword ? "Hide" : "Show"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* CONFIRM PASSWORD (REGISTER ONLY) */}
+        {mode === "register" && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: COLORS.card,
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              marginBottom: 20
+            }}
+          >
+            <TextInput
+              ref={confirmRef}
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showConfirm}
+              returnKeyType="done"
+              onSubmitEditing={handleAuth}
+              style={{ flex: 1, padding: 14 }}
+            />
+
+            <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
+              <Text style={{ color: COLORS.primary, fontWeight: "bold" }}>
+                {showConfirm ? "Hide" : "Show"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* BUTTON */}
+        <TouchableOpacity
+          onPress={handleAuth}
+          style={{
+            backgroundColor: COLORS.primary,
+            padding: 14,
+            borderRadius: 12,
+            alignItems: "center"
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "bold" }}>
+            {loading
+              ? "Please wait..."
+              : mode === "login"
+              ? "Login"
+              : "Create Account"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* SWITCH MODE */}
+        <TouchableOpacity
+          onPress={() =>
+            setMode(mode === "login" ? "register" : "login")
+          }
+          style={{ marginTop: 20 }}
+        >
+          <Text style={{ textAlign: "center", color: COLORS.primary }}>
+            {mode === "login"
+              ? "Create new account"
+              : "Already have an account? Login"}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

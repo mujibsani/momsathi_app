@@ -1,18 +1,21 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
 import AppContainer from "../components/AppContainer";
+import ResultCard from "../components/ResultCard";
+
+import { analyzeSymptom } from "../engine/symptomEngine";
+import { addHistory, subscribeHistory } from "../services/historyApi";
 
 import API from "../services/api";
-import ResultCard from "../components/ResultCard";
-import { useHistoryStore } from "../store/useHistoryStore";
-import { analyzeSymptom } from "../engine/symptomEngine";
 
+/* ---------------- COLORS ---------------- */
 const COLORS = {
   bg: "#F6F8FF",
   card: "#FFFFFF",
   primary: "#2D3A8C",
-  subtext: "#666",
+  sub: "#666",
   danger: "#E53935"
 };
 
@@ -20,52 +23,101 @@ export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [week, setWeek] = useState(20);
+  const [recent, setRecent] = useState([]);
 
-  const addHistory = useHistoryStore((s) => s.addHistory);
+  const lastClickRef = useRef(null);
 
+  /* ---------------- LOAD WEEK ---------------- */
   useEffect(() => {
-    const loadWeek = async () => {
-      const saved = await AsyncStorage.getItem("pregnancy_week");
-      setWeek(saved ? parseInt(saved) : 20);
+    const load = async () => {
+      const w = await AsyncStorage.getItem("pregnancy_week");
+      if (w) setWeek(parseInt(w));
     };
-    loadWeek();
+    load();
   }, []);
 
+  /* ---------------- REALTIME HISTORY (SAFE) ---------------- */
+  useEffect(() => {
+    const unsub = subscribeHistory((data) => {
+      if (!data) return;
+      setRecent(data.slice(0, 5));
+    });
+
+    return () => unsub && unsub();
+  }, []);
+
+  /* ---------------- SYMPTOMS ---------------- */
   const symptoms = [
-    { label: "Back Pain", slug: "back-pain", icon: "🦴" },
-    { label: "Headache", slug: "headache", icon: "🧠" },
-    { label: "Swelling", slug: "swelling", icon: "🦵" },
-    { label: "Stress", slug: "stress", icon: "😣" },
-    { label: "Nausea", slug: "nausea", icon: "🤢" }
+    {
+      title: "Common Symptoms",
+      items: [
+        { label: "Headache", slug: "headache", icon: "🧠" },
+        { label: "Nausea", slug: "nausea", icon: "🤢" },
+        { label: "Back Pain", slug: "back-pain", icon: "🦴" }
+      ]
+    },
+    {
+      title: "Body Changes",
+      items: [
+        { label: "Swelling", slug: "swelling", icon: "🦵" },
+        { label: "Fatigue", slug: "fatigue", icon: "😴" },
+        { label: "Dizziness", slug: "dizziness", icon: "🌀" }
+      ]
+    },
+    {
+      title: "Emotional",
+      items: [
+        { label: "Stress", slug: "stress", icon: "😣" },
+        { label: "Mood Swings", slug: "mood-swings", icon: "🎭" }
+      ]
+    }
   ];
 
-  const checkProblem = useCallback(async (slug) => {
-    if (loading) return;
+  /* ---------------- CHECK SYMPTOM ---------------- */
+  const checkProblem = useCallback(
+    async (slug, label) => {
+      if (loading) return;
 
-    setLoading(true);
-    setResult(null);
+      // prevent spam click
+      if (lastClickRef.current === slug) return;
+      lastClickRef.current = slug;
 
-    try {
-      const res = await API.get(
-        `/problems/helper/?problem=${slug}&week=${week}`
-      );
+      setLoading(true);
+      setResult(null);
 
-      const processed = analyzeSymptom(res.data, week);
-      setResult(processed);
+      try {
+        const res = await API.get(
+          `/problems/helper/?problem=${slug}&week=${week}`
+        );
 
-      await addHistory({
-        problem: processed.problem,
-        urgency: processed.urgency,
-        date: new Date().toLocaleDateString()
-      });
+        const processed = analyzeSymptom(res.data, week);
 
-    } catch (e) {
-      console.log(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading, week]);
+        setResult({
+          ...processed,
+          slug
+        });
 
+        await addHistory({
+          problem: label,
+          slug, // ✅ important
+          urgency: processed.urgency || "low",
+          confidence: processed.confidence || 0, // future AI use
+          week,
+          timestamp: Date.now(),
+          date: new Date().toISOString()
+        });
+
+      } catch (e) {
+        console.log("API error:", e);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading, week]
+  );
+
+
+  /* ---------------- CARD ---------------- */
   const Card = ({ children }) => (
     <View
       style={{
@@ -73,7 +125,7 @@ export default function SymptomScreen() {
         padding: 16,
         borderRadius: 16,
         marginTop: 12,
-        elevation: 3
+        elevation: 2
       }}
     >
       {children}
@@ -82,63 +134,79 @@ export default function SymptomScreen() {
 
   return (
     <AppContainer>
-    <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
-      {/* HEADER */}
-      <Text style={{ fontSize: 22, fontWeight: "bold", color: COLORS.primary }}>
-        🧠 Symptom Checker
-      </Text>
+        {/* HEADER */}
+        <Text style={{ fontSize: 24, fontWeight: "700", color: COLORS.primary }}>
+          🧠 Symptom Checker
+        </Text>
 
-      <Text style={{ color: COLORS.subtext, marginTop: 5 }}>
-        Tap a symptom for AI guidance
-      </Text>
+        <Text style={{ color: COLORS.sub, marginTop: 4 }}>
+          Week {week} • Tap symptoms for AI analysis
+        </Text>
 
-      {/* SYMPTOMS GRID */}
-      <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 15 }}>
+        {/* RECENT */}
+        {recent.length > 0 && (
+          <Card>
+            <Text style={{ fontWeight: "bold" }}>🕒 Recent Symptoms</Text>
+            {recent.map((item) => (
+              <Text key={item.id} style={{ marginTop: 6 }}>
+                • {item.problem} ({item.urgency})
+              </Text>
+            ))}
+          </Card>
+        )}
 
-        {symptoms.map((s) => (
-          <TouchableOpacity
-            key={s.slug}
-            onPress={() => checkProblem(s.slug)}
-            style={{
-              backgroundColor: "#fff",
-              padding: 14,
-              borderRadius: 14,
-              margin: 6,
-              width: "45%",
-              alignItems: "center",
-              elevation: 2
-            }}
-          >
-            <Text style={{ fontSize: 22 }}>{s.icon}</Text>
-            <Text style={{ marginTop: 5, fontWeight: "600" }}>
-              {s.label}
+        {/* SYMPTOMS */}
+        {symptoms.map((group, index) => (
+          <View key={index} style={{ marginTop: 15 }}>
+            <Text style={{ fontWeight: "700", marginBottom: 8 }}>
+              {group.title}
             </Text>
-          </TouchableOpacity>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {group.items.map((s) => (
+                <TouchableOpacity
+                  key={s.slug}
+                  onPress={() => checkProblem(s.slug, s.label)}
+                  style={{
+                    backgroundColor: "#fff",
+                    padding: 14,
+                    borderRadius: 14,
+                    margin: 6,
+                    width: "45%",
+                    alignItems: "center",
+                    elevation: 2
+                  }}
+                >
+                  <Text style={{ fontSize: 22 }}>{s.icon}</Text>
+                  <Text style={{ marginTop: 5, fontWeight: "600" }}>
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         ))}
 
-      </View>
+        {/* LOADING */}
+        {loading && (
+          <Card>
+            <Text style={{ fontWeight: "bold" }}>🧠 AI analyzing...</Text>
+            <Text style={{ marginTop: 6, color: COLORS.sub }}>
+              Generating safe pregnancy guidance
+            </Text>
+          </Card>
+        )}
 
-      {/* LOADING */}
-      {loading && (
-        <Card>
-          <Text style={{ fontWeight: "bold" }}>
-            🧠 AI analyzing symptom...
-          </Text>
-          <Text style={{ marginTop: 5, color: COLORS.subtext }}>
-            Generating safe pregnancy advice
-          </Text>
-        </Card>
-      )}
+        {/* RESULT */}
+        {result && (
+          <View style={{ marginTop: 15 }}>
+            <ResultCard result={result} />
+          </View>
+        )}
 
-      {/* RESULT */}
-      {result && (
-        <View style={{ marginTop: 15 }}>
-          <ResultCard result={result} />
-        </View>
-      )}
-
-    </ScrollView>
+      </ScrollView>
     </AppContainer>
   );
 }

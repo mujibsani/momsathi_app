@@ -5,17 +5,26 @@ import {
 } from "firebase/auth";
 
 import { auth } from "./firebase";
+import { createUserProfile } from "./userService"; // ✅ ADD THIS
 
 /* ---------------- REGISTER ---------------- */
 export const registerUser = async (email, password) => {
   try {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     const userCredential = await createUserWithEmailAndPassword(
       auth,
-      email,
-      password
+      cleanEmail,
+      cleanPassword
     );
 
-    return userCredential.user;
+    const user = userCredential.user;
+
+    // 🔥 CREATE FIRESTORE USER PROFILE (IMPORTANT)
+    await createUserProfile(user);
+
+    return user;
   } catch (error) {
     console.log("REGISTER ERROR:", error.code, error.message);
     throw error;
@@ -25,10 +34,13 @@ export const registerUser = async (email, password) => {
 /* ---------------- LOGIN ---------------- */
 export const loginUser = async (email, password) => {
   try {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
+
     const userCredential = await signInWithEmailAndPassword(
       auth,
-      email,
-      password
+      cleanEmail,
+      cleanPassword
     );
 
     return userCredential.user;

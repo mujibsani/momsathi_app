@@ -1,62 +1,123 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import AppContainer from "../components/AppContainer";
+import { View, Text, ScrollView } from "react-native";
 
-import { getHistory } from "../services/history";
-import { analyzeHistory, generateInsights } from "../engine/intelligenceEngine";
-import { generateAlerts } from "../engine/alertEngine";
+import AppContainer from "../components/AppContainer";
+import { subscribeHistory } from "../services/historyApi";
+
+import {
+  analyzeHistory,
+  generateInsights
+} from "../engine/intelligenceEngine";
+
+import { generatePredictions } from "../engine/predictionEngine";
+import { analyzeAdvanced } from "../engine/advancedIntelligenceEngine";
+import { detectEmergency } from "../engine/emergencyEngine";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /* ---------------- COLORS ---------------- */
 const COLORS = {
   bg: "#F6F8FF",
   card: "#FFFFFF",
   primary: "#2D3A8C",
-  success: "#4CAF50",
-  warning: "#FFC107",
+  success: "#43A047",
   danger: "#E53935",
-  alertBg: "#FFECEC",
-  insightBg: "#FFF7E6",
+  warning: "#FB8C00",
   text: "#222",
-  subtext: "#666"
+  sub: "#666"
 };
 
 export default function DashboardScreen() {
   const [history, setHistory] = useState([]);
-  const navigation = useNavigation();
+  const [week, setWeek] = useState(20);
 
-  /* ---------------- LOAD ---------------- */
+  /* ---------------- REALTIME ---------------- */
   useEffect(() => {
-    const load = async () => {
-      const data = await getHistory();
+    const unsubscribe = subscribeHistory((data) => {
       setHistory(data || []);
-    };
-    load();
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  /* ---------------- AI ---------------- */
-  const analysis = useMemo(() => analyzeHistory(history), [history]);
+  /* ---------------- LOAD WEEK ---------------- */
+  useEffect(() => {
+    const loadWeek = async () => {
+      const w = await AsyncStorage.getItem("pregnancy_week");
+      if (w) setWeek(parseInt(w));
+    };
+    loadWeek();
+  }, []);
+
+  // See the history data 
+  // useEffect(() => {
+  //   console.log("RAW HISTORY:", history);
+  // }, [history]);
+  /* ---------------- RECENT 7 DAYS (FIXED DATE SAFETY) ---------------- */
+  const recent = useMemo(() => {
+    const now = Date.now();
+
+    return history.filter((item) => {
+      const ts = item?.timestamp;
+
+      if (!ts) return false;
+
+      const diffDays = (now - ts) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7;
+    });
+  }, [history]);
+
+  /* ---------------- BASIC STATS ---------------- */
+  const total = recent.length;
+  const high = recent.filter(i => i.urgency === "high").length;
+
+  /* ---------------- AI LAYER ---------------- */
+  const advanced = useMemo(
+    () => analyzeAdvanced(recent, week),
+    [recent, week]
+  );
+
+  const emergency = useMemo(
+    () => detectEmergency(recent, week),
+    [recent, week]
+  );
+
+  const analysis = useMemo(() => analyzeHistory(recent), [recent]);
   const insights = useMemo(() => generateInsights(analysis), [analysis]);
-  const alerts = useMemo(() => generateAlerts(history), [history]);
+  const predictions = useMemo(() => generatePredictions(recent), [recent]);
 
-  /* ---------------- STATS ---------------- */
-  const total = history.length;
+  /* ---------------- CLEAN SUMMARY (IMPROVED UX TEXT) ---------------- */
+  const summary = useMemo(() => {
+    if (total === 0) {
+      return "Start tracking symptoms to get personalized pregnancy insights.";
+    }
 
-  const highRisk = history.filter(
-    (i) => i.urgency === "high"
-  ).length;
+    if (advanced.riskLevel === "low") {
+      return "Your health looks stable. Keep maintaining your current routine.";
+    }
 
-  const score =
-    total === 0 ? 100 : Math.max(100 - highRisk * 20, 30);
+    if (advanced.riskLevel === "medium") {
+      return "Some symptoms need attention. Monitor and stay hydrated.";
+    }
+
+    return "High risk pattern detected. Consider consulting a doctor soon.";
+  }, [total, advanced.riskLevel]);
+
+  /* ---------------- SCORE COLOR ---------------- */
+  const getScoreColor = () => {
+    if (advanced.riskScore >= 80) return COLORS.danger;
+    if (advanced.riskScore >= 50) return COLORS.warning;
+    return COLORS.success;
+  };
 
   /* ---------------- CARD ---------------- */
   const Card = ({ children }) => (
     <View
       style={{
         backgroundColor: COLORS.card,
+        padding: 16,
         borderRadius: 16,
-        padding: 18,
-        marginTop: 15,
+        marginTop: 14,
         elevation: 3
       }}
     >
@@ -66,118 +127,133 @@ export default function DashboardScreen() {
 
   return (
     <AppContainer>
-    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <ScrollView style={{ padding: 20 }}>
+      <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
 
         {/* HEADER */}
-        <Text style={{ fontSize: 24, fontWeight: "bold", color: COLORS.text }}>
+        <Text style={{ fontSize: 28, fontWeight: "700", color: COLORS.primary }}>
           📊 Health Dashboard
         </Text>
 
-        {/* SCORE */}
-        <Card>
-          <Text style={{ color: COLORS.subtext }}>Health Score</Text>
-          <Text
+        <Text style={{ color: COLORS.sub, marginTop: 4 }}>
+          AI-powered pregnancy monitoring
+        </Text>
+
+        {/* 🚨 EMERGENCY (HIGH PRIORITY UI) */}
+        {emergency.isEmergency && (
+          <View
             style={{
-              fontSize: 32,
-              fontWeight: "bold",
-              color: COLORS.primary,
-              marginTop: 5
+              backgroundColor:
+                emergency.level === "critical"
+                  ? COLORS.danger
+                  : COLORS.warning,
+              padding: 16,
+              borderRadius: 16,
+              marginTop: 18
             }}
           >
-            {score}/100
+            <Text style={{ color: "white", fontWeight: "bold" }}>
+              🚨 Emergency Alert
+            </Text>
+            <Text style={{ color: "white", marginTop: 6 }}>
+              {emergency.message}
+            </Text>
+          </View>
+        )}
+
+        {/* SCORE (MAIN FOCUS) */}
+        <Card>
+          <Text style={{ fontWeight: "bold" }}>Health Risk Score</Text>
+
+          <Text
+            style={{
+              fontSize: 42,
+              fontWeight: "bold",
+              marginTop: 8,
+              color: getScoreColor()
+            }}
+          >
+            {advanced.riskScore}
+          </Text>
+
+          <Text style={{ marginTop: 4, fontWeight: "600", color: getScoreColor() }}>
+            {advanced.riskLevel.toUpperCase()}
           </Text>
         </Card>
 
-        {/* STATS ROW */}
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Card>
-              <Text style={{ color: COLORS.subtext }}>Total</Text>
-              <Text style={{ fontSize: 22, fontWeight: "bold", marginTop: 5 }}>
-                {total}
-              </Text>
-            </Card>
-          </View>
+        {/* AI SUMMARY */}
+        <Card>
+          <Text style={{ fontWeight: "bold" }}>🧠 AI Summary</Text>
 
-          <View style={{ flex: 1 }}>
-            <Card>
-              <Text style={{ color: COLORS.subtext }}>High Risk</Text>
-              <Text
-                style={{
-                  fontSize: 22,
-                  fontWeight: "bold",
-                  marginTop: 5,
-                  color: COLORS.danger
-                }}
-              >
-                {highRisk}
-              </Text>
-            </Card>
-          </View>
+          <Text style={{ marginTop: 8, color: COLORS.sub, lineHeight: 20 }}>
+            {summary}
+          </Text>
+        </Card>
+
+        {/* QUICK STATS */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <Card>
+            <Text>Total</Text>
+            <Text style={{ fontWeight: "bold", fontSize: 18 }}>{total}</Text>
+          </Card>
+
+          <Card>
+            <Text>High Risk</Text>
+            <Text style={{ fontWeight: "bold", fontSize: 18 }}>{high}</Text>
+          </Card>
+
+          <Card>
+            <Text>Trend</Text>
+            <Text style={{ fontWeight: "bold" }}>
+              {analysis.trend || "stable"}
+            </Text>
+          </Card>
         </View>
 
-        {/* ALERTS */}
-        {alerts.length > 0 && (
-          <View
-            style={{
-              backgroundColor: COLORS.alertBg,
-              borderRadius: 16,
-              padding: 16,
-              marginTop: 15
-            }}
-          >
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              🚨 Alerts
-            </Text>
-
-            {alerts.slice(0, 2).map((a, i) => (
-              <Text key={i} style={{ marginTop: 6 }}>
-                • {a}
+        {/* INSIGHTS */}
+        {insights.length > 0 && (
+          <Card>
+            <Text style={{ fontWeight: "bold" }}>🧠 Insights</Text>
+            {insights.map((i, idx) => (
+              <Text key={idx} style={{ marginTop: 6 }}>
+                • {i}
               </Text>
             ))}
-          </View>
+          </Card>
         )}
 
-        {/* INSIGHT */}
-        {insights.length > 0 && (
-          <View
-            style={{
-              backgroundColor: COLORS.insightBg,
-              borderRadius: 16,
-              padding: 16,
-              marginTop: 15
-            }}
-          >
-            <Text style={{ fontWeight: "bold", fontSize: 16 }}>
-              🧠 AI Insight
-            </Text>
-
-            <Text style={{ marginTop: 6 }}>
-              {insights[0]}
-            </Text>
-          </View>
+        {/* PREDICTIONS */}
+        {predictions.length > 0 && (
+          <Card>
+            <Text style={{ fontWeight: "bold" }}>🔮 Predictions</Text>
+            {predictions.map((p, idx) => (
+              <Text key={idx} style={{ marginTop: 6 }}>
+                • {p}
+              </Text>
+            ))}
+          </Card>
         )}
 
-        {/* BUTTON */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Report")}
-          style={{
-            marginTop: 25,
-            backgroundColor: COLORS.primary,
-            padding: 16,
-            borderRadius: 16,
-            alignItems: "center",
-            elevation: 3
-          }}
-        >
-          <Text style={{ color: "white", fontWeight: "bold" }}>
-            📅 View Weekly Report
-          </Text>
-        </TouchableOpacity>
+        {/* RECENT ACTIVITY */}
+        <Card>
+          <Text style={{ fontWeight: "bold" }}>Recent Activity</Text>
+
+          {recent.length > 0 ? (
+            recent.slice(0, 3).map((item) => (
+              <View key={item.id} style={{ marginTop: 10 }}>
+                <Text style={{ fontWeight: "500" }}>{item.problem}</Text>
+                <Text style={{ color: COLORS.sub }}>
+                  {item.date}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={{ marginTop: 8, color: COLORS.sub }}>
+              No recent activity yet
+            </Text>
+          )}
+        </Card>
 
       </ScrollView>
-    </View>
     </AppContainer>
   );
 }
