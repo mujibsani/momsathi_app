@@ -28,7 +28,7 @@ const COLORS = {
 };
 
 export default function AuthScreen({ navigation }) {
-  const [mode, setMode] = useState("register");
+  const [mode, setMode] = useState("login");
   const [step, setStep] = useState(1);
 
   const [email, setEmail] = useState("");
@@ -100,11 +100,7 @@ export default function AuthScreen({ navigation }) {
   const handleLogin = async () => {
     try {
       await loginUser(email, password);
-      // navigation.replace("Home");
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Main" }]
-      });
+      
     } catch (e) {
       Alert.alert("Login Failed", e.message);
     }

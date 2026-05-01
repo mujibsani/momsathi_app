@@ -2,65 +2,71 @@
 
 const WEEK_DATA = {
   1: {
-    baby: "Fertilization begins. Your baby is a tiny cluster of cells.",
-    body: "Hormones start changing silently.",
-    tips: ["Start taking folic acid", "Avoid alcohol", "Get proper rest"]
+    baby: "Fertilization begins. A new life is starting as a tiny cluster of cells.",
+    body: "Hormonal changes begin quietly in your body.",
+    tips: ["Start folic acid", "Avoid alcohol", "Get proper rest"]
   },
   2: {
-    baby: "The fertilized egg travels to the uterus.",
-    body: "Ovulation and early hormonal shifts occur.",
-    tips: ["Track your cycle", "Eat balanced food", "Stay hydrated"]
+    baby: "The fertilized egg travels toward the uterus for implantation.",
+    body: "Early hormonal shifts may start.",
+    tips: ["Stay hydrated", "Track your cycle", "Eat balanced food"]
   },
   3: {
-    baby: "Implantation happens. Pregnancy officially begins.",
-    body: "You may feel light spotting.",
-    tips: ["Avoid stress", "Eat iron-rich foods", "Sleep well"]
+    baby: "Implantation occurs — pregnancy officially begins.",
+    body: "Light spotting or fatigue may appear.",
+    tips: ["Avoid stress", "Sleep well", "Eat iron-rich foods"]
   },
   4: {
-    baby: "Your baby is the size of a poppy seed.",
-    body: "Missed period may occur.",
+    baby: "Your baby is now a tiny cluster of rapidly dividing cells.",
+    body: "Missed period may be your first sign.",
     tips: ["Take pregnancy test", "Start prenatal vitamins", "Reduce caffeine"]
   },
 
   5: {
-    baby: "Heart starts forming.",
+    baby: "Baby’s heart begins forming for the first time.",
     body: "Morning sickness may begin.",
-    tips: ["Eat small meals", "Stay hydrated", "Avoid strong smells"]
+    tips: ["Small frequent meals", "Stay hydrated", "Avoid strong smells"]
   },
+
   6: {
-    baby: "Heartbeat can be detected.",
-    body: "Fatigue increases.",
-    tips: ["Rest more", "Light walking", "Eat protein"]
+    baby: "Heartbeat can now be detected in early scans.",
+    body: "Fatigue increases significantly.",
+    tips: ["Rest often", "Light walking", "Protein intake"]
   },
+
   7: {
-    baby: "Brain and face structures develop.",
-    body: "Nausea continues.",
+    baby: "Brain and facial features are developing rapidly.",
+    body: "Nausea may continue.",
     tips: ["Ginger tea", "Avoid oily food", "Stay calm"]
   },
+
   8: {
-    baby: "Limbs start forming.",
+    baby: "Arms and legs are forming clearly.",
     body: "Breast tenderness increases.",
-    tips: ["Wear comfortable bra", "Stay hydrated", "Eat calcium-rich food"]
+    tips: ["Comfortable bra", "Calcium foods", "Hydration"]
   },
 
   9: {
-    baby: "Baby is now called a fetus.",
-    body: "Mood swings may occur.",
-    tips: ["Relaxation exercises", "Avoid stress", "Talk to loved ones"]
+    baby: "Your baby is now officially a fetus.",
+    body: "Mood changes may be noticeable.",
+    tips: ["Relaxation", "Talk support", "Avoid stress"]
   },
+
   10: {
-    baby: "Vital organs are forming.",
+    baby: "Vital organs are forming fast.",
     body: "Energy may slightly improve.",
-    tips: ["Balanced diet", "Light exercise", "Stay hydrated"]
+    tips: ["Balanced diet", "Light exercise", "Hydration"]
   },
+
   11: {
-    baby: "Baby starts moving (not felt yet).",
-    body: "Less nausea for some women.",
-    tips: ["Eat fruits", "Stay active", "Get sunlight"]
+    baby: "Baby begins small movements (not yet felt).",
+    body: "Nausea may reduce.",
+    tips: ["Sunlight", "Fruits", "Stay active"]
   },
+
   12: {
-    baby: "End of 1st trimester.",
-    body: "Miscarriage risk decreases.",
+    baby: "End of first trimester — major milestone.",
+    body: "Risk decreases significantly.",
     tips: ["Routine checkup", "Healthy diet", "Light exercise"]
   },
 
@@ -205,18 +211,43 @@ const WEEK_DATA = {
     tips: ["Stay calm", "Prepare mentally", "Monitor contractions"]
   },
   40: {
-    baby: "Due week 🎉",
-    body: "Labor expected.",
-    tips: ["Stay relaxed", "Follow doctor advice", "Be ready"]
+    baby: "Your baby is fully developed and ready for birth 🎉",
+    body: "Labor may begin anytime.",
+    tips: ["Stay calm", "Follow doctor guidance", "Be prepared"]
   }
 };
+/* ---------------- DAILY VARIATION LAYER ---------------- */
+
+const EMOTIONAL_TONES = [
+  "Today your baby is quietly growing in strength.",
+  "A beautiful stage of development is happening right now.",
+  "Your body is doing something extraordinary today.",
+  "Every moment is shaping your baby’s future."
+];
+
+/* ---------------- MAIN ENGINE ---------------- */
 
 export const getDailyUpdate = (week) => {
   const data = WEEK_DATA[week] || WEEK_DATA[40];
 
+  // deterministic daily variation (changes every day)
+  const daySeed = new Date().getDate();
+  const tone = EMOTIONAL_TONES[daySeed % EMOTIONAL_TONES.length];
+
   return {
     baby: data.baby,
     body: data.body,
-    tips: data.tips
+
+    tips: data.tips,
+
+    // NEW LAYER (use in UI later if you want upgrade)
+    mood: tone,
+
+    highlight:
+      week <= 12
+        ? "Early foundation phase"
+        : week <= 27
+        ? "Growth acceleration phase"
+        : "Final preparation phase"
   };
 };

@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
-  Alert
+  ScrollView
 } from "react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -12,25 +11,22 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import AppContainer from "../components/AppContainer";
 import { logoutUser } from "../services/authService";
 
-import {
-  doc,
-  onSnapshot,
-  setDoc
-} from "firebase/firestore";
-
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db, auth } from "../services/firebase";
+
 import { calculateWeek } from "../utils/pregnancy";
 import { getDailyUpdate } from "../engine/dailyEngine";
 
-/* ---------------- COLORS ---------------- */
+/* ---------------- THEME ---------------- */
 const COLORS = {
-  bg: "#F6F8FF",
+  bg: "#F4F6FF",
   card: "#FFFFFF",
   primary: "#2D3A8C",
-  success: "#4CAF50",
-  danger: "#E53935",
-  text: "#1E1E2D",
-  sub: "#6C6C80"
+  accent: "#EEF1FF",
+  success: "#22C55E",
+  danger: "#EF4444",
+  text: "#111827",
+  sub: "#6B7280"
 };
 
 export default function HomeScreen({ navigation }) {
@@ -47,7 +43,7 @@ export default function HomeScreen({ navigation }) {
     const ref = doc(db, "users", uid);
 
     const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) setUser(snap.data());
+      setUser(snap.exists() ? snap.data() : null);
     });
 
     return () => unsub();
@@ -64,40 +60,55 @@ export default function HomeScreen({ navigation }) {
     return user.pregnancyWeek || 1;
   }, [user]);
 
-  /* ---------------- USER-SAFE STORAGE KEY (IMPORTANT FIX) */
-  const getStorageKey = useCallback(() => {
-    return uid ? `daily_data_${uid}` : "daily_data_guest";
+  const trimester = useMemo(() => {
+    if (week <= 12) return "1st Trimester";
+    if (week <= 27) return "2nd Trimester";
+    return "3rd Trimester";
+  }, [week]);
+
+  /* ---------------- STORAGE KEY (FIXED SAFETY) ---------------- */
+  const storageKey = useMemo(() => {
+    return uid ? `daily_${uid}` : null;
   }, [uid]);
 
-  /* ---------------- DAILY ENGINE (FIXED) ---------------- */
+  /* ---------------- RESET DAILY ON USER CHANGE ---------------- */
   useEffect(() => {
+    setDaily(null);
+    setStreak(0);
+  }, [uid]);
+
+  /* ---------------- DAILY ENGINE ---------------- */
+  useEffect(() => {
+    if (!uid || !storageKey) return;
     loadDaily();
   }, [week, uid]);
 
   const loadDaily = async () => {
     try {
-      if (!uid) return;
-
-      const todayKey = new Date().toDateString();
-      const storageKey = getStorageKey();
+      const today = new Date().toDateString();
 
       const saved = await AsyncStorage.getItem(storageKey);
 
-      // reuse same day + same user
       if (saved) {
         const parsed = JSON.parse(saved);
 
-        if (parsed.date === todayKey && parsed.week === week) {
+        // SAME USER + SAME WEEK + SAME DAY
+        if (
+          parsed.date === today &&
+          parsed.week === week
+        ) {
           setDaily(parsed.data);
           setStreak(parsed.streak || 1);
           return;
         }
       }
 
-      // generate fresh for new user/week/day
+      // generate new daily content
       const newDaily = getDailyUpdate(week);
 
-      const newStreak = saved ? (JSON.parse(saved).streak || 0) + 1 : 1;
+      const newStreak = saved
+        ? (JSON.parse(saved).streak || 0) + 1
+        : 1;
 
       setDaily(newDaily);
       setStreak(newStreak);
@@ -105,7 +116,7 @@ export default function HomeScreen({ navigation }) {
       await AsyncStorage.setItem(
         storageKey,
         JSON.stringify({
-          date: todayKey,
+          date: today,
           week,
           data: newDaily,
           streak: newStreak
@@ -113,11 +124,11 @@ export default function HomeScreen({ navigation }) {
       );
 
     } catch (e) {
-      console.log("DAILY ERROR:", e);
+      console.log("DAILY ENGINE ERROR:", e);
     }
   };
 
-  /* ---------------- UPDATE WEEK ---------------- */
+  /* ---------------- WEEK UPDATE ---------------- */
   const updateWeek = async (newWeek) => {
     try {
       if (!uid) return;
@@ -128,162 +139,222 @@ export default function HomeScreen({ navigation }) {
         ref,
         {
           pregnancyWeek: Number(newWeek),
-          lastUpdated: new Date().toISOString()
+          updatedAt: new Date().toISOString()
         },
         { merge: true }
       );
 
     } catch (e) {
-      Alert.alert("Error", e.message);
+      console.log("WEEK UPDATE ERROR:", e);
     }
   };
 
-  /* ---------------- TRIMESTER ---------------- */
-  const getTrimester = (w) => {
-    if (w <= 12) return "1st Trimester";
-    if (w <= 27) return "2nd Trimester";
-    return "3rd Trimester";
-  };
-
-  /* ---------------- LOGOUT (IMPORTANT FIX) ---------------- */
+  /* ---------------- LOGOUT (FIXED CLEAN RESET) ---------------- */
   const handleLogout = async () => {
-    Alert.alert("Logout", "Do you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await logoutUser();
-
-          // IMPORTANT: clear local state
-          setUser(null);
-          setDaily(null);
-          setStreak(0);
-        }
-      }
-    ]);
+    await logoutUser();
+    setUser(null);
+    setDaily(null);
+    setStreak(0);
   };
+
+  /* ---------------- CARD ---------------- */
+  const Card = ({ children, style }) => (
+    <View
+      style={[
+        {
+          backgroundColor: COLORS.card,
+          borderRadius: 22,
+          padding: 18,
+          marginTop: 14,
+          elevation: 5
+        },
+        style
+      ]}
+    >
+      {children}
+    </View>
+  );
 
   return (
     <AppContainer>
-      <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
 
-        {/* HEADER */}
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <View>
-            <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.primary }}>
-              🤱 Nurtura
-            </Text>
-            <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-              Your daily pregnancy companion
-            </Text>
-          </View>
+        {/* ---------------- FIXED HEADER ---------------- */}
+        <View
+          style={{
+            padding: 18,
+            paddingBottom: 10,
+            backgroundColor: COLORS.bg
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 30,
+              fontWeight: "800",
+              color: COLORS.primary
+            }}
+          >
+            🤱 Nurtura
+          </Text>
+
+          <Text style={{ color: COLORS.sub, marginTop: 4 }}>
+            Your pregnancy companion
+          </Text>
 
           <TouchableOpacity onPress={handleLogout}>
-            <Text style={{ color: COLORS.danger, fontWeight: "600" }}>
+            <Text
+              style={{
+                color: COLORS.danger,
+                fontWeight: "600",
+                marginTop: 6
+              }}
+            >
               Logout
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* STATUS */}
-        <View
-          style={{
-            backgroundColor: COLORS.card,
-            padding: 20,
-            borderRadius: 20,
-            marginTop: 20,
-            elevation: 4
+        {/* ---------------- SCROLLABLE CONTENT ---------------- */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            padding: 18,
+            paddingBottom: 120
           }}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={{ color: COLORS.sub }}>Current Week</Text>
 
-          <Text style={{ fontSize: 44, fontWeight: "800", color: COLORS.primary }}>
-            {week}
-          </Text>
+          {/* WEEK CARD */}
+          <Card style={{ backgroundColor: COLORS.accent }}>
+            <Text style={{ color: COLORS.sub }}>Current Week</Text>
 
-          <Text style={{ color: COLORS.success, fontWeight: "600" }}>
-            {getTrimester(week)}
-          </Text>
-
-          {/* WEEK CONTROL */}
-          <View style={{ flexDirection: "row", marginTop: 12 }}>
-            <TouchableOpacity
-              onPress={() => updateWeek(Math.max(1, week - 1))}
+            <Text
               style={{
-                flex: 1,
-                backgroundColor: "#BDC3FF",
-                padding: 10,
-                borderRadius: 10,
-                marginRight: 6
+                fontSize: 48,
+                fontWeight: "900",
+                color: COLORS.primary
               }}
             >
-              <Text style={{ textAlign: "center" }}>–</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => updateWeek(Math.min(42, week + 1))}
-              style={{
-                flex: 1,
-                backgroundColor: COLORS.primary,
-                padding: 10,
-                borderRadius: 10
-              }}
-            >
-              <Text style={{ color: "#fff", textAlign: "center" }}>+</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* DAILY CARD */}
-        {daily && (
-          <View
-            style={{
-              backgroundColor: COLORS.card,
-              padding: 18,
-              borderRadius: 18,
-              marginTop: 15,
-              elevation: 4
-            }}
-          >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: COLORS.primary }}>
-              🌱 Today’s Baby Update
+              {week}
             </Text>
 
-            <Text style={{ marginTop: 12, fontWeight: "600" }}>👶 Baby</Text>
-            <Text style={{ marginTop: 4 }}>{daily.baby}</Text>
+            <Text style={{ fontWeight: "600", color: COLORS.success }}>
+              {trimester}
+            </Text>
 
-            <Text style={{ marginTop: 12, fontWeight: "600" }}>🤰 Body</Text>
-            <Text style={{ marginTop: 4 }}>{daily.body}</Text>
+            <View style={{ flexDirection: "row", marginTop: 14 }}>
+              <TouchableOpacity
+                onPress={() => updateWeek(Math.max(1, week - 1))}
+                style={{
+                  flex: 1,
+                  backgroundColor: "#D1D5FF",
+                  padding: 12,
+                  borderRadius: 14,
+                  marginRight: 8
+                }}
+              >
+                <Text style={{ textAlign: "center", fontWeight: "700" }}>−</Text>
+              </TouchableOpacity>
 
-            <Text style={{ marginTop: 12, fontWeight: "600" }}>💡 Tips</Text>
+              <TouchableOpacity
+                onPress={() => updateWeek(Math.min(42, week + 1))}
+                style={{
+                  flex: 1,
+                  backgroundColor: COLORS.primary,
+                  padding: 12,
+                  borderRadius: 14
+                }}
+              >
+                <Text style={{ textAlign: "center", color: "#fff", fontWeight: "700" }}>
+                  +
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
 
-            {daily.tips?.map((tip, i) => (
-              <Text key={i} style={{ marginTop: 6 }}>
-                • {tip}
+          {/* STREAK */}
+          <Card>
+            <Text style={{ fontWeight: "700", fontSize: 16 }}>
+              🔥 Daily Streak
+            </Text>
+
+            <Text style={{ fontSize: 28, fontWeight: "800", marginTop: 6 }}>
+              {streak} days
+            </Text>
+
+            <Text style={{ color: COLORS.sub, marginTop: 4 }}>
+              Keep tracking your pregnancy journey
+            </Text>
+          </Card>
+
+          {/* DAILY */}
+          {daily && (
+            <Card>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "800",
+                  color: COLORS.primary
+                }}
+              >
+                🌱 Today’s Baby Experience
               </Text>
-            ))}
-          </View>
-        )}
 
-        {/* CTA */}
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Symptoms")}
-          style={{
-            marginTop: 25,
-            backgroundColor: COLORS.success,
-            padding: 18,
-            borderRadius: 18,
-            alignItems: "center",
-            elevation: 4
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "700" }}>
-            🧠 Check Symptoms
-          </Text>
-        </TouchableOpacity>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: COLORS.primary,
+                  marginTop: 4
+                }}
+              >
+                {daily.mood}
+              </Text>
 
-      </ScrollView>
+              <Text style={{ marginTop: 12, fontWeight: "700" }}>👶 Baby</Text>
+              <Text style={{ marginTop: 6, lineHeight: 20 }}>
+                {daily.baby}
+              </Text>
+
+              <Text style={{ marginTop: 12, fontWeight: "700" }}>🤰 Body</Text>
+              <Text style={{ marginTop: 6, lineHeight: 20 }}>
+                {daily.body}
+              </Text>
+
+              <Text style={{ marginTop: 12, fontWeight: "700" }}>💡 Tips</Text>
+
+              {daily.tips?.map((tip, i) => (
+                <View
+                  key={i}
+                  style={{ flexDirection: "row", marginTop: 6 }}
+                >
+                  <Text style={{ marginRight: 6 }}>•</Text>
+                  <Text style={{ flex: 1, lineHeight: 20 }}>
+                    {tip}
+                  </Text>
+                </View>
+              ))}
+            </Card>
+          )}
+
+          {/* CTA */}
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Symptoms")}
+            style={{
+              marginTop: 22,
+              backgroundColor: COLORS.success,
+              padding: 18,
+              borderRadius: 18,
+              alignItems: "center"
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "800" }}>
+              🧠 Check Symptoms
+            </Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </View>
     </AppContainer>
   );
 }
