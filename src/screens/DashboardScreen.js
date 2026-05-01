@@ -13,7 +13,10 @@ import { generatePredictions } from "../engine/predictionEngine";
 import { analyzeAdvanced } from "../engine/advancedIntelligenceEngine";
 import { detectEmergency } from "../engine/emergencyEngine";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "../services/firebase";
+
+import { calculateWeek } from "../utils/pregnancy";
 
 /* ---------------- COLORS ---------------- */
 const COLORS = {
@@ -29,9 +32,9 @@ const COLORS = {
 
 export default function DashboardScreen() {
   const [history, setHistory] = useState([]);
-  const [week, setWeek] = useState(20);
+  const [user, setUser] = useState(null);
 
-  /* ---------------- REALTIME ---------------- */
+  /* ---------------- REALTIME HISTORY ---------------- */
   useEffect(() => {
     const unsubscribe = subscribeHistory((data) => {
       setHistory(data || []);
@@ -40,26 +43,51 @@ export default function DashboardScreen() {
     return () => unsubscribe();
   }, []);
 
-  /* ---------------- LOAD WEEK ---------------- */
+  /* ---------------- LOAD USER PROFILE ---------------- */
   useEffect(() => {
-    const loadWeek = async () => {
-      const w = await AsyncStorage.getItem("pregnancy_week");
-      if (w) setWeek(parseInt(w));
+    const loadUser = async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
+
+        const ref = doc(db, "users", uid);
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          setUser(snap.data());
+        }
+      } catch (e) {
+        console.log("USER LOAD ERROR:", e);
+      }
     };
-    loadWeek();
+
+    loadUser();
   }, []);
 
-  // See the history data 
-  // useEffect(() => {
-  //   console.log("RAW HISTORY:", history);
-  // }, [history]);
-  /* ---------------- RECENT 7 DAYS (FIXED DATE SAFETY) ---------------- */
+  /* ---------------- PREGNANCY WEEK (DYNAMIC CORE) ---------------- */
+  const week = useMemo(() => {
+    if (!user) return 1;
+
+    // 1. AUTO CALCULATE (BEST METHOD)
+    if (user.pregnancyStartDate) {
+      return calculateWeek(user.pregnancyStartDate);
+    }
+
+    // 2. MANUAL INITIAL WEEK (fallback)
+    if (user.initialWeek) {
+      return user.initialWeek;
+    }
+
+    // 3. OLD SYSTEM fallback
+    return user.pregnancyWeek || 1;
+  }, [user]);
+
+  /* ---------------- RECENT 7 DAYS ---------------- */
   const recent = useMemo(() => {
     const now = Date.now();
 
     return history.filter((item) => {
       const ts = item?.timestamp;
-
       if (!ts) return false;
 
       const diffDays = (now - ts) / (1000 * 60 * 60 * 24);
@@ -67,11 +95,11 @@ export default function DashboardScreen() {
     });
   }, [history]);
 
-  /* ---------------- BASIC STATS ---------------- */
+  /* ---------------- STATS ---------------- */
   const total = recent.length;
   const high = recent.filter(i => i.urgency === "high").length;
 
-  /* ---------------- AI LAYER ---------------- */
+  /* ---------------- AI LAYERS ---------------- */
   const advanced = useMemo(
     () => analyzeAdvanced(recent, week),
     [recent, week]
@@ -86,7 +114,7 @@ export default function DashboardScreen() {
   const insights = useMemo(() => generateInsights(analysis), [analysis]);
   const predictions = useMemo(() => generatePredictions(recent), [recent]);
 
-  /* ---------------- CLEAN SUMMARY (IMPROVED UX TEXT) ---------------- */
+  /* ---------------- SUMMARY ---------------- */
   const summary = useMemo(() => {
     if (total === 0) {
       return "Start tracking symptoms to get personalized pregnancy insights.";
@@ -135,10 +163,10 @@ export default function DashboardScreen() {
         </Text>
 
         <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-          AI-powered pregnancy monitoring
+          Week {week} • AI-powered pregnancy monitoring
         </Text>
 
-        {/* 🚨 EMERGENCY (HIGH PRIORITY UI) */}
+        {/* EMERGENCY */}
         {emergency.isEmergency && (
           <View
             style={{
@@ -160,7 +188,7 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* SCORE (MAIN FOCUS) */}
+        {/* SCORE */}
         <Card>
           <Text style={{ fontWeight: "bold" }}>Health Risk Score</Text>
 
@@ -180,7 +208,7 @@ export default function DashboardScreen() {
           </Text>
         </Card>
 
-        {/* AI SUMMARY */}
+        {/* SUMMARY */}
         <Card>
           <Text style={{ fontWeight: "bold" }}>🧠 AI Summary</Text>
 
@@ -189,7 +217,7 @@ export default function DashboardScreen() {
           </Text>
         </Card>
 
-        {/* QUICK STATS */}
+        {/* STATS */}
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Card>
             <Text>Total</Text>
@@ -233,7 +261,7 @@ export default function DashboardScreen() {
           </Card>
         )}
 
-        {/* RECENT ACTIVITY */}
+        {/* RECENT */}
         <Card>
           <Text style={{ fontWeight: "bold" }}>Recent Activity</Text>
 

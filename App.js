@@ -17,11 +17,12 @@ import HistoryScreen from "./src/screens/HistoryScreen";
 import WeeklyReportScreen from "./src/screens/WeeklyReportScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
 import AuthScreen from "./src/screens/AuthScreen";
+import VerifyScreen from "./src/screens/VerifyScreen";
 
 /* ---------------- ENGINE ---------------- */
 import { scheduleDailyReminder } from "./src/engine/notificationEngine";
 
-/* ---------------- NOTIFICATION HANDLER ---------------- */
+/* ---------------- NOTIFICATIONS ---------------- */
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -33,7 +34,7 @@ Notifications.setNotificationHandler({
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-/* ---------------- TABS ---------------- */
+/* ---------------- MAIN TABS ---------------- */
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -61,74 +62,112 @@ function MainTabs() {
   );
 }
 
-/* ---------------- ROOT APP ---------------- */
+/* ---------------- APP ---------------- */
 export default function App() {
   const [user, setUser] = useState(null);
   const [initDone, setInitDone] = useState(false);
 
-  /* ---------------- AUTH LISTENER ---------------- */
+  /* ---------------- AUTH + EMAIL VERIFY SYNC ---------------- */
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setInitDone(true);
+    let interval = null;
+
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setUser(null);
+        setInitDone(true);
+        return;
+      }
+
+      try {
+        // 🔥 FORCE REFRESH USER STATE (IMPORTANT FIX)
+        await u.reload();
+        setUser(auth.currentUser);
+        setInitDone(true);
+
+        // 🔁 KEEP SYNCING EMAIL VERIFICATION STATUS
+        if (!interval) {
+          interval = setInterval(async () => {
+            if (auth.currentUser) {
+              await auth.currentUser.reload();
+              setUser({ ...auth.currentUser });
+            }
+          }, 3000);
+        }
+
+      } catch (e) {
+        console.log("AUTH SYNC ERROR:", e);
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   /* ---------------- NOTIFICATIONS ---------------- */
   useEffect(() => {
+    const initNotifications = async () => {
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+
+        const { status } = await Notifications.requestPermissionsAsync();
+
+        if (status !== "granted") return;
+
+        setTimeout(async () => {
+          await scheduleDailyReminder();
+        }, 1000);
+
+      } catch (err) {
+        console.log("Notification error:", err);
+      }
+    };
+
     initNotifications();
   }, []);
 
-  const initNotifications = async () => {
-    try {
-      // small delay for SDK stability
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const { status } = await Notifications.requestPermissionsAsync();
-
-      if (status !== "granted") {
-        console.log("Notification permission denied");
-        return;
-      }
-
-      setTimeout(async () => {
-        await scheduleDailyReminder();
-      }, 1000);
-
-    } catch (err) {
-      console.log("Notification error:", err);
-    }
-  };
-
-  /* ---------------- LOADING STATE ---------------- */
+  /* ---------------- LOADING ---------------- */
   if (!initDone) return null;
+
+  const isLoggedIn = !!user;
+  const isVerified = user?.emailVerified;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer>
+
           <Stack.Navigator screenOptions={{ headerShown: false }}>
 
-            {/* AUTH GATE */}
-            {!user ? (
+            {/* 🔓 NOT LOGGED IN */}
+            {!isLoggedIn && (
               <Stack.Screen name="Auth" component={AuthScreen} />
-            ) : (
+            )}
+
+            {/* ⚠️ LOGGED IN BUT NOT VERIFIED */}
+            {isLoggedIn && !isVerified && (
+              <Stack.Screen name="Verify" component={VerifyScreen} />
+            )}
+
+            {/* ✅ VERIFIED USER */}
+            {isLoggedIn && isVerified && (
               <>
-                {/* MAIN APP */}
                 <Stack.Screen name="Main" component={MainTabs} />
 
-                {/* WEEKLY REPORT */}
                 <Stack.Screen
                   name="WeeklyReport"
                   component={WeeklyReportScreen}
-                  options={{ headerShown: true, title: "Weekly Report" }}
+                  options={{
+                    headerShown: true,
+                    title: "Weekly Report"
+                  }}
                 />
               </>
             )}
 
           </Stack.Navigator>
+
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>

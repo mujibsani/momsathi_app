@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import AppContainer from "../components/AppContainer";
 import ResultCard from "../components/ResultCard";
@@ -9,6 +8,11 @@ import { analyzeSymptom } from "../engine/symptomEngine";
 import { addHistory, subscribeHistory } from "../services/historyApi";
 
 import API from "../services/api";
+
+import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "../services/firebase";
+
+import { calculateWeek } from "../utils/pregnancy";
 
 /* ---------------- COLORS ---------------- */
 const COLORS = {
@@ -22,21 +26,48 @@ const COLORS = {
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [week, setWeek] = useState(20);
+  const [user, setUser] = useState(null);
   const [recent, setRecent] = useState([]);
 
   const lastClickRef = useRef(null);
 
-  /* ---------------- LOAD WEEK ---------------- */
+  /* ---------------- LOAD USER (FIRESTORE) ---------------- */
   useEffect(() => {
-    const load = async () => {
-      const w = await AsyncStorage.getItem("pregnancy_week");
-      if (w) setWeek(parseInt(w));
+    const loadUser = async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        if (!uid) return;
+
+        const ref = doc(db, "users", uid);
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          setUser(snap.data());
+        }
+      } catch (e) {
+        console.log("USER LOAD ERROR:", e);
+      }
     };
-    load();
+
+    loadUser();
   }, []);
 
-  /* ---------------- REALTIME HISTORY (SAFE) ---------------- */
+  /* ---------------- AUTO PREGNANCY WEEK ---------------- */
+  const week = useMemo(() => {
+    if (!user) return 1;
+
+    if (user.pregnancyStartDate) {
+      return calculateWeek(user.pregnancyStartDate);
+    }
+
+    if (user.initialWeek) {
+      return user.initialWeek;
+    }
+
+    return user.pregnancyWeek || 1;
+  }, [user]);
+
+  /* ---------------- REALTIME HISTORY ---------------- */
   useEffect(() => {
     const unsub = subscribeHistory((data) => {
       if (!data) return;
@@ -78,7 +109,6 @@ export default function SymptomScreen() {
     async (slug, label) => {
       if (loading) return;
 
-      // prevent spam click
       if (lastClickRef.current === slug) return;
       lastClickRef.current = slug;
 
@@ -99,9 +129,9 @@ export default function SymptomScreen() {
 
         await addHistory({
           problem: label,
-          slug, // ✅ important
+          slug,
           urgency: processed.urgency || "low",
-          confidence: processed.confidence || 0, // future AI use
+          confidence: processed.confidence || 0,
           week,
           timestamp: Date.now(),
           date: new Date().toISOString()
@@ -115,7 +145,6 @@ export default function SymptomScreen() {
     },
     [loading, week]
   );
-
 
   /* ---------------- CARD ---------------- */
   const Card = ({ children }) => (
