@@ -225,29 +225,88 @@ const EMOTIONAL_TONES = [
   "Every moment is shaping your baby’s future."
 ];
 
+// /* ---------------- MAIN ENGINE ---------------- */
+
+// export const getDailyUpdate = (week) => {
+//   const data = WEEK_DATA[week] || WEEK_DATA[40];
+
+//   // deterministic daily variation (changes every day)
+//   const daySeed = new Date().getDate();
+//   const tone = EMOTIONAL_TONES[daySeed % EMOTIONAL_TONES.length];
+
+//   return {
+//     baby: data.baby,
+//     body: data.body,
+
+//     tips: data.tips,
+
+//     // NEW LAYER (use in UI later if you want upgrade)
+//     mood: tone,
+
+//     highlight:
+//       week <= 12
+//         ? "Early foundation phase"
+//         : week <= 27
+//         ? "Growth acceleration phase"
+//         : "Final preparation phase"
+//   };
+// };
+
+// import WEEK_DATA from "./weekData";
+
+/* ---------------- MOOD ENGINE ---------------- */
+const getMood = (week, streak) => {
+  if (week <= 12) return "Anxious but hopeful 💭";
+  if (week <= 27) return "Stable and energetic 🌿";
+  return "Tired but excited 💛";
+};
+
+/* ---------------- ENERGY ENGINE ---------------- */
+const getEnergy = (week, streak) => {
+  if (week <= 12) return "Low ⚡";
+  if (week <= 27) return streak > 5 ? "High ⚡" : "Normal ⚡";
+  return "Low ⚡";
+};
+
+/* ---------------- ALERT LEVEL ---------------- */
+const getAlert = (week) => {
+  if (week <= 12) return "Monitor 🟡";
+  if (week <= 27) return "Safe 🟢";
+  return "Monitor 🟡";
+};
+
+/* ---------------- INSIGHT ENGINE ---------------- */
+const getInsight = (week, mood, streak) => {
+  if (week <= 12) {
+    return "Early pregnancy stage. Your body is adjusting to major hormonal changes.";
+  }
+
+  if (week <= 27) {
+    return "Your baby is growing rapidly. This is the most active development phase.";
+  }
+
+  return "Final trimester. Focus on rest, nutrition, and monitoring movements.";
+};
+
 /* ---------------- MAIN ENGINE ---------------- */
+export const getDailyUpdate = (week, streak = 1) => {
+  const base = WEEK_DATA[week] || WEEK_DATA[40];
 
-export const getDailyUpdate = (week) => {
-  const data = WEEK_DATA[week] || WEEK_DATA[40];
+  const mood = getMood(week, streak);
+  const energy = getEnergy(week, streak);
+  const alertLevel = getAlert(week);
+  const insight = getInsight(week, mood, streak);
 
-  // deterministic daily variation (changes every day)
-  const daySeed = new Date().getDate();
-  const tone = EMOTIONAL_TONES[daySeed % EMOTIONAL_TONES.length];
-
+  // console.log("energy: ", energy);
   return {
-    baby: data.baby,
-    body: data.body,
+    baby: base.baby,
+    body: base.body,
+    tips: base.tips || [],
 
-    tips: data.tips,
-
-    // NEW LAYER (use in UI later if you want upgrade)
-    mood: tone,
-
-    highlight:
-      week <= 12
-        ? "Early foundation phase"
-        : week <= 27
-        ? "Growth acceleration phase"
-        : "Final preparation phase"
+    mood: mood || "Normal 🙂",
+    energy: energy || "Normal ⚡",
+    alertLevel: alertLevel || "Safe 🟢",
+    insight: insight || "No insight available"
+    
   };
 };

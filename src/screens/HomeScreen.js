@@ -85,36 +85,53 @@ export default function HomeScreen({ navigation }) {
 
   const loadDaily = async () => {
     try {
+      if (!uid) return;
+
+      const key = `daily_${uid}`;
       const today = new Date().toDateString();
 
-      const saved = await AsyncStorage.getItem(storageKey);
+      const saved = await AsyncStorage.getItem(key);
+
+      let newStreak = 1;
 
       if (saved) {
         const parsed = JSON.parse(saved);
 
-        // SAME USER + SAME WEEK + SAME DAY
-        if (
-          parsed.date === today &&
-          parsed.week === week
-        ) {
+        const lastDate = parsed.date;
+        const lastStreak = parsed.streak || 1;
+
+        const last = new Date(lastDate);
+        const now = new Date(today);
+
+        const diffDays = Math.floor(
+          (now - last) / (1000 * 60 * 60 * 24)
+        );
+
+        // SAME DAY → DO NOT CHANGE STREAK
+        if (diffDays === 0) {
           setDaily(parsed.data);
-          setStreak(parsed.streak || 1);
+          setStreak(lastStreak);
           return;
+        }
+
+        // NEXT DAY → INCREASE STREAK
+        if (diffDays === 1) {
+          newStreak = lastStreak + 1;
+        }
+
+        // MISSED DAY → RESET STREAK
+        if (diffDays > 1) {
+          newStreak = 1;
         }
       }
 
-      // generate new daily content
-      const newDaily = getDailyUpdate(week);
-
-      const newStreak = saved
-        ? (JSON.parse(saved).streak || 0) + 1
-        : 1;
+      const newDaily = getDailyUpdate(week, newStreak);
 
       setDaily(newDaily);
       setStreak(newStreak);
 
       await AsyncStorage.setItem(
-        storageKey,
+        key,
         JSON.stringify({
           date: today,
           week,
@@ -124,7 +141,7 @@ export default function HomeScreen({ navigation }) {
       );
 
     } catch (e) {
-      console.log("DAILY ENGINE ERROR:", e);
+      console.log(e);
     }
   };
 
@@ -290,47 +307,49 @@ export default function HomeScreen({ navigation }) {
           {/* DAILY */}
           {daily && (
             <Card>
-              <Text
-                style={{
-                  fontSize: 16,
-                  fontWeight: "800",
-                  color: COLORS.primary
-                }}
-              >
+              {/* HEADER */}
+              <Text style={{ fontSize: 16, fontWeight: "800", color: COLORS.primary }}>
                 🌱 Today’s Baby Experience
               </Text>
 
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: COLORS.primary,
-                  marginTop: 4
-                }}
-              >
-                {daily.mood}
-              </Text>
+              {/* 🧠 INSIGHT (NEW) */}
+              <View style={{ marginTop: 10 }}>
+                <Text style={{ fontWeight: "700" }}>🧠 AI Insight</Text>
+                <Text style={{ marginTop: 4, color: COLORS.text, lineHeight: 20 }}>
+                  {daily.insight}
+                </Text>
+              </View>
 
+              {/* 😊 MOOD + ⚡ ENERGY + 🚨 ALERT */}
+              <View style={{ flexDirection: "row", marginTop: 10, flexWrap: "wrap" }}>
+                <Text style={{ marginRight: 10 }}>
+                  😊 Mood: {daily.mood}
+                </Text>
+
+                <Text style={{ marginRight: 10 }}>
+                  ⚡ Energy: {daily.energy}
+                </Text>
+
+                <Text>
+                  🚨 Status: {daily.alertLevel}
+                </Text>
+              </View>
+
+              {/* BABY */}
               <Text style={{ marginTop: 12, fontWeight: "700" }}>👶 Baby</Text>
-              <Text style={{ marginTop: 6, lineHeight: 20 }}>
-                {daily.baby}
-              </Text>
+              <Text style={{ marginTop: 6, lineHeight: 20 }}>{daily.baby}</Text>
 
+              {/* BODY */}
               <Text style={{ marginTop: 12, fontWeight: "700" }}>🤰 Body</Text>
-              <Text style={{ marginTop: 6, lineHeight: 20 }}>
-                {daily.body}
-              </Text>
+              <Text style={{ marginTop: 6, lineHeight: 20 }}>{daily.body}</Text>
 
+              {/* TIPS */}
               <Text style={{ marginTop: 12, fontWeight: "700" }}>💡 Tips</Text>
 
               {daily.tips?.map((tip, i) => (
-                <View
-                  key={i}
-                  style={{ flexDirection: "row", marginTop: 6 }}
-                >
+                <View key={i} style={{ flexDirection: "row", marginTop: 6 }}>
                   <Text style={{ marginRight: 6 }}>•</Text>
-                  <Text style={{ flex: 1, lineHeight: 20 }}>
-                    {tip}
-                  </Text>
+                  <Text style={{ flex: 1, lineHeight: 20 }}>{tip}</Text>
                 </View>
               ))}
             </Card>
