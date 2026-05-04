@@ -1,5 +1,16 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { View, Text, ScrollView, TouchableOpacity } from "react-native";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo
+} from "react";
+
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity
+} from "react-native";
 
 import AppContainer from "../components/AppContainer";
 import ResultCard from "../components/ResultCard";
@@ -25,13 +36,12 @@ const COLORS = {
 
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingSlug, setLoadingSlug] = useState(null);
+  const [selectedSlug, setSelectedSlug] = useState(null);
   const [user, setUser] = useState(null);
   const [recent, setRecent] = useState([]);
 
-  const lastClickRef = useRef(null);
-
-  /* ---------------- LOAD USER (FIRESTORE) ---------------- */
+  /* ---------------- LOAD USER ---------------- */
   useEffect(() => {
     const loadUser = async () => {
       try {
@@ -52,7 +62,7 @@ export default function SymptomScreen() {
     loadUser();
   }, []);
 
-  /* ---------------- AUTO PREGNANCY WEEK ---------------- */
+  /* ---------------- WEEK ---------------- */
   const week = useMemo(() => {
     if (!user) return 1;
 
@@ -60,14 +70,10 @@ export default function SymptomScreen() {
       return calculateWeek(user.pregnancyStartDate);
     }
 
-    if (user.initialWeek) {
-      return user.initialWeek;
-    }
-
     return user.pregnancyWeek || 1;
   }, [user]);
 
-  /* ---------------- REALTIME HISTORY ---------------- */
+  /* ---------------- HISTORY ---------------- */
   useEffect(() => {
     const unsub = subscribeHistory((data) => {
       if (!data) return;
@@ -107,43 +113,54 @@ export default function SymptomScreen() {
   /* ---------------- CHECK SYMPTOM ---------------- */
   const checkProblem = useCallback(
     async (slug, label) => {
-      if (loading) return;
+      if (loadingSlug === slug) return;
 
-      if (lastClickRef.current === slug) return;
-      lastClickRef.current = slug;
-
-      setLoading(true);
+      setSelectedSlug(slug);
+      setLoadingSlug(slug);
       setResult(null);
 
       try {
-        const res = await API.get(
-          `/problems/helper/?problem=${slug}&week=${week}`
-        );
+        let apiData = null;
 
-        const processed = analyzeSymptom(res.data, week);
+        try {
+          const res = await API.get(
+            `/problems/helper/?problem=${slug}&week=${week}`
+          );
+          apiData = res.data;
+        } catch (e) {
+          console.log("API fallback");
+        }
+
+        const processed = analyzeSymptom({
+          symptoms: [slug],
+          week,
+          apiData,
+          streak: 1
+        });
 
         setResult({
           ...processed,
-          slug
+          slug,
+          label
         });
 
         await addHistory({
           problem: label,
           slug,
-          urgency: processed.urgency || "low",
-          confidence: processed.confidence || 0,
+          urgency: processed.urgency,
+          riskLevel: processed.riskLevel,
           week,
           timestamp: Date.now(),
           date: new Date().toISOString()
         });
 
       } catch (e) {
-        console.log("API error:", e);
+        console.log("CHECK ERROR:", e);
       } finally {
-        setLoading(false);
+        setLoadingSlug(null);
       }
     },
-    [loading, week]
+    [loadingSlug, week]
   );
 
   /* ---------------- CARD ---------------- */
@@ -163,15 +180,18 @@ export default function SymptomScreen() {
 
   return (
     <AppContainer>
-      <ScrollView style={{ flex: 1, backgroundColor: COLORS.bg, padding: 20 }}>
-
+      <ScrollView
+        style={{ flex: 1, backgroundColor: COLORS.bg }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* HEADER */}
         <Text style={{ fontSize: 24, fontWeight: "700", color: COLORS.primary }}>
           🧠 Symptom Checker
         </Text>
 
         <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-          Week {week} • Tap symptoms for AI analysis
+          Week {week} • AI-powered pregnancy safety
         </Text>
 
         {/* RECENT */}
@@ -193,48 +213,60 @@ export default function SymptomScreen() {
               {group.title}
             </Text>
 
+            {/* GRID */}
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-              {group.items.map((s) => (
-                <TouchableOpacity
-                  key={s.slug}
-                  onPress={() => checkProblem(s.slug, s.label)}
-                  style={{
-                    backgroundColor: "#fff",
-                    padding: 14,
-                    borderRadius: 14,
-                    margin: 6,
-                    width: "45%",
-                    alignItems: "center",
-                    elevation: 2
-                  }}
-                >
-                  <Text style={{ fontSize: 22 }}>{s.icon}</Text>
-                  <Text style={{ marginTop: 5, fontWeight: "600" }}>
-                    {s.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {group.items.map((s) => {
+                const isSelected = selectedSlug === s.slug;
+
+                return (
+                  <TouchableOpacity
+                    key={s.slug}
+                    onPress={() => checkProblem(s.slug, s.label)}
+                    style={{
+                      backgroundColor: isSelected ? "#EEF1FF" : "#fff",
+                      padding: 14,
+                      borderRadius: 14,
+                      margin: 6,
+                      width: "45%",
+                      alignItems: "center",
+                      elevation: isSelected ? 4 : 2
+                    }}
+                  >
+                    <Text style={{ fontSize: 22 }}>{s.icon}</Text>
+                    <Text style={{ marginTop: 5, fontWeight: "600" }}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+
+            {/* RESULT (FIXED POSITION) */}
+            {selectedSlug &&
+              group.items.some((i) => i.slug === selectedSlug) && (
+                <View style={{ marginTop: 10 }}>
+                  
+                  {/* LOADING */}
+                  {loadingSlug === selectedSlug && (
+                    <Card>
+                      <Text style={{ fontWeight: "bold" }}>
+                        🧠 AI analyzing...
+                      </Text>
+                      <Text style={{ marginTop: 4, color: COLORS.sub }}>
+                        Understanding your symptoms safely
+                      </Text>
+                    </Card>
+                  )}
+
+                  {/* RESULT */}
+                  {result && loadingSlug === null && (
+                    <ResultCard result={result} />
+                  )}
+
+                </View>
+              )}
           </View>
         ))}
-
-        {/* LOADING */}
-        {loading && (
-          <Card>
-            <Text style={{ fontWeight: "bold" }}>🧠 AI analyzing...</Text>
-            <Text style={{ marginTop: 6, color: COLORS.sub }}>
-              Generating safe pregnancy guidance
-            </Text>
-          </Card>
-        )}
-
-        {/* RESULT */}
-        {result && (
-          <View style={{ marginTop: 15 }}>
-            <ResultCard result={result} />
-          </View>
-        )}
-
       </ScrollView>
     </AppContainer>
   );
