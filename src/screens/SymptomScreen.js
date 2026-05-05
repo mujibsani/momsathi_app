@@ -1,273 +1,320 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo
-} from "react";
-
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity
+  TouchableOpacity,
+  Animated,
+  Dimensions,
+  PanResponder,
+  Pressable
 } from "react-native";
 
-import AppContainer from "../components/AppContainer";
 import ResultCard from "../components/ResultCard";
-
 import { analyzeSymptom } from "../engine/symptomEngine";
-import { addHistory, subscribeHistory } from "../services/historyApi";
-
-import API from "../services/api";
-
-import { doc, getDoc } from "firebase/firestore";
-import { db, auth } from "../services/firebase";
-
 import { calculateWeek } from "../utils/pregnancy";
+import { auth, db } from "../services/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { subscribeHistory } from "../services/historyApi";
 
-/* ---------------- COLORS ---------------- */
+/* ---------------- CONSTANTS ---------------- */
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+const SNAP_TOP = SCREEN_HEIGHT * 0.15;
+const SNAP_MID = SCREEN_HEIGHT * 0.35;
+const SNAP_BOTTOM = SCREEN_HEIGHT;
+
 const COLORS = {
-  bg: "#F6F8FF",
+  bg: "#F8F9FF",
   card: "#FFFFFF",
-  primary: "#2D3A8C",
-  sub: "#666",
-  danger: "#E53935"
+  primary: "#5B6CFF",
+  text: "#1A1A2E",
+  sub: "#7A7A90",
 };
 
+/* ---------------- COMPONENT ---------------- */
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
-  const [loadingSlug, setLoadingSlug] = useState(null);
-  const [selectedSlug, setSelectedSlug] = useState(null);
   const [user, setUser] = useState(null);
   const [recent, setRecent] = useState([]);
 
-  /* ---------------- LOAD USER ---------------- */
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const uid = auth.currentUser?.uid;
-        if (!uid) return;
+  /* ---------------- ANIMATION ---------------- */
+  const translateY = useRef(new Animated.Value(SNAP_BOTTOM)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
 
-        const ref = doc(db, "users", uid);
-        const snap = await getDoc(ref);
+  /* ---------------- OPEN ---------------- */
+  const openCard = () => {
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: SNAP_MID,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 120,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
-        if (snap.exists()) {
-          setUser(snap.data());
+  /* ---------------- CLOSE ---------------- */
+  const closeCard = () => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: SNAP_BOTTOM,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setResult(null));
+  };
+
+  /* ---------------- SNAP LOGIC ---------------- */
+  const snapTo = (toValue) => {
+    Animated.spring(translateY, {
+      toValue,
+      useNativeDriver: true,
+      damping: 20,
+      stiffness: 120,
+    }).start();
+  };
+
+  /* ---------------- DRAG ---------------- */
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 5,
+
+      onPanResponderMove: (_, gesture) => {
+        const newY = SNAP_MID + gesture.dy;
+        translateY.setValue(newY);
+      },
+
+      onPanResponderRelease: (_, gesture) => {
+        const velocity = gesture.vy;
+
+        if (gesture.dy > 150 || velocity > 1.2) {
+          closeCard(); // 👇 swipe down fast
+        } else if (gesture.dy < -120) {
+          snapTo(SNAP_TOP); // 👆 expand
+        } else {
+          snapTo(SNAP_MID); // 🔁 default
         }
-      } catch (e) {
-        console.log("USER LOAD ERROR:", e);
-      }
+      },
+    })
+  ).current;
+
+  /* ---------------- USER ---------------- */
+  useEffect(() => {
+    const load = async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) setUser(snap.data());
     };
 
-    loadUser();
+    load();
   }, []);
 
-  /* ---------------- WEEK ---------------- */
   const week = useMemo(() => {
     if (!user) return 1;
-
-    if (user.pregnancyStartDate) {
-      return calculateWeek(user.pregnancyStartDate);
-    }
-
-    return user.pregnancyWeek || 1;
+    return user.pregnancyStartDate
+      ? calculateWeek(user.pregnancyStartDate)
+      : user.pregnancyWeek || 1;
   }, [user]);
 
   /* ---------------- HISTORY ---------------- */
   useEffect(() => {
-    const unsub = subscribeHistory((data) => {
-      if (!data) return;
-      setRecent(data.slice(0, 5));
-    });
-
+    const unsub = subscribeHistory((d) => setRecent(d || []));
     return () => unsub && unsub();
   }, []);
 
   /* ---------------- SYMPTOMS ---------------- */
-  const symptoms = [
+  const groups = [
     {
-      title: "Common Symptoms",
+      title: "Common",
       items: [
         { label: "Headache", slug: "headache", icon: "🧠" },
         { label: "Nausea", slug: "nausea", icon: "🤢" },
-        { label: "Back Pain", slug: "back-pain", icon: "🦴" }
-      ]
+        { label: "Fatigue", slug: "fatigue", icon: "😴" },
+      ],
     },
     {
-      title: "Body Changes",
+      title: "Body",
       items: [
         { label: "Swelling", slug: "swelling", icon: "🦵" },
-        { label: "Fatigue", slug: "fatigue", icon: "😴" },
-        { label: "Dizziness", slug: "dizziness", icon: "🌀" }
-      ]
+        { label: "Back Pain", slug: "back-pain", icon: "🦴" },
+        { label: "Dizziness", slug: "dizziness", icon: "🌀" },
+      ],
     },
     {
-      title: "Emotional",
+      title: "Other",
       items: [
-        { label: "Stress", slug: "stress", icon: "😣" },
-        { label: "Mood Swings", slug: "mood-swings", icon: "🎭" }
-      ]
-    }
+        { label: "Fever", slug: "fever", icon: "🤒" },
+        { label: "Vomiting", slug: "vomiting", icon: "🤮" },
+      ],
+    },
   ];
 
-  /* ---------------- CHECK SYMPTOM ---------------- */
-  const checkProblem = useCallback(
-    async (slug, label) => {
-      if (loadingSlug === slug) return;
+  /* ---------------- ACTION ---------------- */
+  const check = (slug, label) => {
+    const res = analyzeSymptom({
+      symptoms: [slug],
+      week,
+      streak: 1,
+    });
 
-      setSelectedSlug(slug);
-      setLoadingSlug(slug);
-      setResult(null);
+    setResult({ ...res, label });
 
-      try {
-        let apiData = null;
+    // reset position before opening
+    translateY.setValue(SNAP_BOTTOM);
+    openCard();
+  };
 
-        try {
-          const res = await API.get(
-            `/problems/helper/?problem=${slug}&week=${week}`
-          );
-          apiData = res.data;
-        } catch (e) {
-          console.log("API fallback");
-        }
-
-        const processed = analyzeSymptom({
-          symptoms: [slug],
-          week,
-          apiData,
-          streak: 1
-        });
-
-        setResult({
-          ...processed,
-          slug,
-          label
-        });
-
-        await addHistory({
-          problem: label,
-          slug,
-          urgency: processed.urgency,
-          riskLevel: processed.riskLevel,
-          week,
-          timestamp: Date.now(),
-          date: new Date().toISOString()
-        });
-
-      } catch (e) {
-        console.log("CHECK ERROR:", e);
-      } finally {
-        setLoadingSlug(null);
-      }
-    },
-    [loadingSlug, week]
-  );
-
-  /* ---------------- CARD ---------------- */
-  const Card = ({ children }) => (
-    <View
-      style={{
-        backgroundColor: COLORS.card,
-        padding: 16,
-        borderRadius: 16,
-        marginTop: 12,
-        elevation: 2
-      }}
-    >
-      {children}
-    </View>
-  );
-
+  /* ---------------- UI ---------------- */
   return (
-    <AppContainer>
-      <ScrollView
-        style={{ flex: 1, backgroundColor: COLORS.bg }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-      >
+    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
+        
         {/* HEADER */}
-        <Text style={{ fontSize: 24, fontWeight: "700", color: COLORS.primary }}>
-          🧠 Symptom Checker
+        <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.text }}>
+          🧠 Symptom Check
         </Text>
 
         <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-          Week {week} • AI-powered pregnancy safety
+          Week {week} • AI-powered guidance
         </Text>
+
+        {/* WEEK CARD */}
+        <View
+          style={{
+            backgroundColor: "#EEF1FF",
+            padding: 20,
+            borderRadius: 20,
+            marginTop: 16,
+          }}
+        >
+          <Text style={{ color: COLORS.sub }}>Your Pregnancy Week</Text>
+          <Text style={{ fontSize: 40, fontWeight: "900", color: COLORS.primary }}>
+            {week}
+          </Text>
+        </View>
 
         {/* RECENT */}
         {recent.length > 0 && (
-          <Card>
-            <Text style={{ fontWeight: "bold" }}>🕒 Recent Symptoms</Text>
-            {recent.map((item) => (
-              <Text key={item.id} style={{ marginTop: 6 }}>
-                • {item.problem} ({item.urgency})
-              </Text>
-            ))}
-          </Card>
+          <View style={{ marginTop: 16 }}>
+            <Text style={{ fontWeight: "700" }}>Recent</Text>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
+              {recent.slice(0, 4).map((r) => (
+                <View
+                  key={r.id}
+                  style={{
+                    backgroundColor: "#fff",
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    marginRight: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 12 }}>{r.problem}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         )}
 
-        {/* SYMPTOMS */}
-        {symptoms.map((group, index) => (
-          <View key={index} style={{ marginTop: 15 }}>
-            <Text style={{ fontWeight: "700", marginBottom: 8 }}>
-              {group.title}
+        {/* GROUPS */}
+        {groups.map((g, i) => (
+          <View key={i} style={{ marginTop: 20 }}>
+            <Text style={{ fontWeight: "700", marginBottom: 10 }}>
+              {g.title}
             </Text>
 
-            {/* GRID */}
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-              {group.items.map((s) => {
-                const isSelected = selectedSlug === s.slug;
-
-                return (
-                  <TouchableOpacity
-                    key={s.slug}
-                    onPress={() => checkProblem(s.slug, s.label)}
-                    style={{
-                      backgroundColor: isSelected ? "#EEF1FF" : "#fff",
-                      padding: 14,
-                      borderRadius: 14,
-                      margin: 6,
-                      width: "45%",
-                      alignItems: "center",
-                      elevation: isSelected ? 4 : 2
-                    }}
-                  >
-                    <Text style={{ fontSize: 22 }}>{s.icon}</Text>
-                    <Text style={{ marginTop: 5, fontWeight: "600" }}>
-                      {s.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              {g.items.map((s) => (
+                <TouchableOpacity
+                  key={s.slug}
+                  onPress={() => check(s.slug, s.label)}
+                  style={{
+                    width: "47%",
+                    backgroundColor: COLORS.card,
+                    padding: 18,
+                    borderRadius: 18,
+                    margin: "1.5%",
+                    elevation: 3,
+                  }}
+                >
+                  <Text style={{ fontSize: 24 }}>{s.icon}</Text>
+                  <Text style={{ marginTop: 8, fontWeight: "600" }}>
+                    {s.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-
-            {/* RESULT (FIXED POSITION) */}
-            {selectedSlug &&
-              group.items.some((i) => i.slug === selectedSlug) && (
-                <View style={{ marginTop: 10 }}>
-                  
-                  {/* LOADING */}
-                  {loadingSlug === selectedSlug && (
-                    <Card>
-                      <Text style={{ fontWeight: "bold" }}>
-                        🧠 AI analyzing...
-                      </Text>
-                      <Text style={{ marginTop: 4, color: COLORS.sub }}>
-                        Understanding your symptoms safely
-                      </Text>
-                    </Card>
-                  )}
-
-                  {/* RESULT */}
-                  {result && loadingSlug === null && (
-                    <ResultCard result={result} />
-                  )}
-
-                </View>
-              )}
           </View>
         ))}
       </ScrollView>
-    </AppContainer>
+
+      {/* BACKDROP */}
+      {result && (
+        <>
+          <Animated.View
+            style={{
+              position: "absolute",
+              width: "100%",
+              height: "100%",
+              backgroundColor: "rgba(0,0,0,0.35)",
+              opacity: backdropOpacity,
+            }}
+          >
+            <Pressable style={{ flex: 1 }} onPress={closeCard} />
+          </Animated.View>
+
+          {/* FLOATING SHEET */}
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              height: SCREEN_HEIGHT,
+              transform: [{ translateY }],
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderTopLeftRadius: 24,
+                borderTopRightRadius: 24,
+                padding: 16,
+                flex: 1,
+              }}
+            >
+              {/* DRAG HANDLE */}
+              <View
+                style={{
+                  width: 40,
+                  height: 5,
+                  backgroundColor: "#ccc",
+                  borderRadius: 3,
+                  alignSelf: "center",
+                  marginBottom: 10,
+                }}
+              />
+
+              <ResultCard result={result} onClose={closeCard} />
+            </View>
+          </Animated.View>
+        </>
+      )}
+    </View>
   );
 }
