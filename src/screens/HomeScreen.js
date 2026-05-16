@@ -33,6 +33,7 @@ export default function HomeScreen({ navigation }) {
   const [user, setUser] = useState(null);
   const [daily, setDaily] = useState(null);
   const [streak, setStreak] = useState(0);
+  const [loadingDaily, setLoadingDaily] = useState(true);
 
   const uid = auth.currentUser?.uid;
 
@@ -51,7 +52,7 @@ export default function HomeScreen({ navigation }) {
 
   /* ---------------- WEEK ---------------- */
   const week = useMemo(() => {
-    if (!user) return 1;
+    if (!user) return null;
 
     if (user.pregnancyStartDate) {
       return calculateWeek(user.pregnancyStartDate);
@@ -61,31 +62,36 @@ export default function HomeScreen({ navigation }) {
   }, [user]);
 
   const trimester = useMemo(() => {
+    if (!week) return "";
     if (week <= 12) return "1st Trimester";
     if (week <= 27) return "2nd Trimester";
     return "3rd Trimester";
   }, [week]);
 
-  /* ---------------- STORAGE KEY (FIXED SAFETY) ---------------- */
+  /* ---------------- STORAGE KEY ---------------- */
   const storageKey = useMemo(() => {
     return uid ? `daily_${uid}` : null;
   }, [uid]);
 
-  /* ---------------- RESET DAILY ON USER CHANGE ---------------- */
+  /* ---------------- RESET ON USER CHANGE ---------------- */
   useEffect(() => {
     setDaily(null);
     setStreak(0);
+    setLoadingDaily(true);
   }, [uid]);
 
   /* ---------------- DAILY ENGINE ---------------- */
   useEffect(() => {
-    if (!uid || !storageKey) return;
+    if (!uid || !user || !week) return;
+
     loadDaily();
-  }, [week, uid]);
+  }, [week, uid, user]);
 
   const loadDaily = async () => {
     try {
-      if (!uid) return;
+      if (!uid || !storageKey) return;
+
+      setLoadingDaily(true);
 
       const key = `daily_${uid}`;
       const today = new Date().toDateString();
@@ -107,21 +113,24 @@ export default function HomeScreen({ navigation }) {
           (now - last) / (1000 * 60 * 60 * 24)
         );
 
-        // SAME DAY → DO NOT CHANGE STREAK
         if (diffDays === 0) {
           setDaily(parsed.data);
           setStreak(lastStreak);
+          setLoadingDaily(false);
           return;
         }
 
-        // NEXT DAY → INCREASE STREAK
         if (diffDays === 1) {
           newStreak = lastStreak + 1;
         }
 
-        // MISSED DAY → RESET STREAK
         if (diffDays > 1) {
           newStreak = 1;
+        }
+
+        // FIX: no recursion anymore
+        if (parsed.week !== Number(week)) {
+          await AsyncStorage.removeItem(key);
         }
       }
 
@@ -129,12 +138,13 @@ export default function HomeScreen({ navigation }) {
 
       setDaily(newDaily);
       setStreak(newStreak);
+      setLoadingDaily(false);
 
       await AsyncStorage.setItem(
         key,
         JSON.stringify({
           date: today,
-          week,
+          week: Number(week),
           data: newDaily,
           streak: newStreak
         })
@@ -142,6 +152,7 @@ export default function HomeScreen({ navigation }) {
 
     } catch (e) {
       console.log(e);
+      setLoadingDaily(false);
     }
   };
 
@@ -160,18 +171,18 @@ export default function HomeScreen({ navigation }) {
         },
         { merge: true }
       );
-
     } catch (e) {
       console.log("WEEK UPDATE ERROR:", e);
     }
   };
 
-  /* ---------------- LOGOUT (FIXED CLEAN RESET) ---------------- */
+  /* ---------------- LOGOUT ---------------- */
   const handleLogout = async () => {
     await logoutUser();
     setUser(null);
     setDaily(null);
     setStreak(0);
+    setLoadingDaily(true);
   };
 
   /* ---------------- CARD ---------------- */
@@ -192,25 +203,39 @@ export default function HomeScreen({ navigation }) {
     </View>
   );
 
+  /* ---------------- FLASH SCREEN ---------------- */
+  if (loadingDaily || !user || week === null) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#2D3A8C",
+          justifyContent: "center",
+          alignItems: "center"
+        }}
+      >
+        <Text style={{ fontSize: 28, fontWeight: "900", color: "#fff" }}>
+          🤱 Nurtura
+        </Text>
+
+        <Text style={{ marginTop: 10, color: "#EEF1FF" }}>
+          Loading your pregnancy journey...
+        </Text>
+
+        <Text style={{ marginTop: 6, color: "#C7D2FE" }}>
+          AI preparing daily insights
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <AppContainer>
       <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
 
-        {/* ---------------- FIXED HEADER ---------------- */}
-        <View
-          style={{
-            padding: 18,
-            paddingBottom: 10,
-            backgroundColor: COLORS.bg
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 30,
-              fontWeight: "800",
-              color: COLORS.primary
-            }}
-          >
+        {/* HEADER */}
+        <View style={{ padding: 18, paddingBottom: 10 }}>
+          <Text style={{ fontSize: 30, fontWeight: "800", color: COLORS.primary }}>
             🤱 Nurtura
           </Text>
 
@@ -219,25 +244,14 @@ export default function HomeScreen({ navigation }) {
           </Text>
 
           <TouchableOpacity onPress={handleLogout}>
-            <Text
-              style={{
-                color: COLORS.danger,
-                fontWeight: "600",
-                marginTop: 6
-              }}
-            >
+            <Text style={{ color: COLORS.danger, fontWeight: "600", marginTop: 6 }}>
               Logout
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* ---------------- SCROLLABLE CONTENT ---------------- */}
         <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            padding: 18,
-            paddingBottom: 120
-          }}
+          contentContainerStyle={{ padding: 18, paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
         >
 
@@ -245,13 +259,7 @@ export default function HomeScreen({ navigation }) {
           <Card style={{ backgroundColor: COLORS.accent }}>
             <Text style={{ color: COLORS.sub }}>Current Week</Text>
 
-            <Text
-              style={{
-                fontSize: 48,
-                fontWeight: "900",
-                color: COLORS.primary
-              }}
-            >
+            <Text style={{ fontSize: 48, fontWeight: "900", color: COLORS.primary }}>
               {week}
             </Text>
 
@@ -305,57 +313,29 @@ export default function HomeScreen({ navigation }) {
           </Card>
 
           {/* DAILY */}
-          {daily && (
-            <Card>
-              {/* HEADER */}
-              <Text style={{ fontSize: 16, fontWeight: "800", color: COLORS.primary }}>
-                🌱 Today’s Baby Experience
-              </Text>
+          <Card>
+            <Text style={{ fontSize: 16, fontWeight: "800", color: COLORS.primary }}>
+              🌱 Today’s Baby Experience
+            </Text>
 
-              {/* 🧠 INSIGHT (NEW) */}
-              <View style={{ marginTop: 10 }}>
-                <Text style={{ fontWeight: "700" }}>🧠 AI Insight</Text>
-                <Text style={{ marginTop: 4, color: COLORS.text, lineHeight: 20 }}>
-                  {daily.insight}
-                </Text>
-              </View>
+            <Text style={{ marginTop: 10, color: COLORS.sub }}>
+              {daily.insight}
+            </Text>
 
-              {/* 😊 MOOD + ⚡ ENERGY + 🚨 ALERT */}
-              <View style={{ flexDirection: "row", marginTop: 10, flexWrap: "wrap" }}>
-                <Text style={{ marginRight: 10 }}>
-                  😊 Mood: {daily.mood}
-                </Text>
+            <Text style={{ marginTop: 10 }}>
+              😊 Mood: {daily.mood}
+            </Text>
 
-                <Text style={{ marginRight: 10 }}>
-                  ⚡ Energy: {daily.energy}
-                </Text>
+            <Text>⚡ Energy: {daily.energy}</Text>
+            <Text>🚨 Status: {daily.alertLevel}</Text>
 
-                <Text>
-                  🚨 Status: {daily.alertLevel}
-                </Text>
-              </View>
+            <Text style={{ marginTop: 12, fontWeight: "700" }}>👶 Baby</Text>
+            <Text>{daily.baby}</Text>
 
-              {/* BABY */}
-              <Text style={{ marginTop: 12, fontWeight: "700" }}>👶 Baby</Text>
-              <Text style={{ marginTop: 6, lineHeight: 20 }}>{daily.baby}</Text>
+            <Text style={{ marginTop: 12, fontWeight: "700" }}>🤰 Body</Text>
+            <Text>{daily.body}</Text>
+          </Card>
 
-              {/* BODY */}
-              <Text style={{ marginTop: 12, fontWeight: "700" }}>🤰 Body</Text>
-              <Text style={{ marginTop: 6, lineHeight: 20 }}>{daily.body}</Text>
-
-              {/* TIPS */}
-              <Text style={{ marginTop: 12, fontWeight: "700" }}>💡 Tips</Text>
-
-              {daily.tips?.map((tip, i) => (
-                <View key={i} style={{ flexDirection: "row", marginTop: 6 }}>
-                  <Text style={{ marginRight: 6 }}>•</Text>
-                  <Text style={{ flex: 1, lineHeight: 20 }}>{tip}</Text>
-                </View>
-              ))}
-            </Card>
-          )}
-
-          {/* CTA */}
           <TouchableOpacity
             onPress={() => navigation.navigate("Symptoms")}
             style={{
@@ -371,7 +351,6 @@ export default function HomeScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
 
-          <View style={{ height: 40 }} />
         </ScrollView>
       </View>
     </AppContainer>

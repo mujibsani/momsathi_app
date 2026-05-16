@@ -216,9 +216,9 @@ export default function SymptomScreen() {
       await addHistory({
         problem: label,
         slug,
-        urgency: res.urgency,
-        riskLevel: res.riskLevel,
-        week,
+        urgency: res.alertLevel || "Safe",
+        riskLevel: res.riskLevel || "low",
+        week: week || 1,
         timestamp: Date.now()
       });
 
@@ -240,7 +240,7 @@ export default function SymptomScreen() {
           </Text>
 
           <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-            Week {week} • iOS Health-style intelligent analysis
+            Week {week} • intelligent analysis
           </Text>
         </View>
 

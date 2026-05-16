@@ -30,16 +30,21 @@ const getUserHistoryRef = () => {
 };
 
 /* ---------------- ADD HISTORY ---------------- */
+
 export const addHistory = async (item) => {
   try {
-    const ref = getUserHistoryRef();
-    if (!ref) throw new Error("No user session");
+    const uid = auth.currentUser?.uid;
+    if (!uid) throw new Error("No user session");
 
-    await addDoc(ref, {
+    const ref = collection(db, "users", uid, "history");
+
+    const safeItem = {
       ...item,
-      createdAt: serverTimestamp()
-    });
+      urgency: item.urgency ?? "Normal", // FIX undefined crash
+      createdAt: serverTimestamp(),
+    };
 
+    await addDoc(ref, safeItem);
   } catch (err) {
     console.log("❌ addHistory error:", err.message);
   }

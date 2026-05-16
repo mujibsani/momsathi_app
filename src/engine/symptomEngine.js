@@ -3,19 +3,19 @@ import { detectEmergency } from "./emergencyEngine";
 
 /* ---------------- CONSTANTS ---------------- */
 
-const RISK_LEVEL = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
+export const RISK_LEVEL = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
 };
 
-const ALERT_LEVEL = {
-  SAFE: "Safe",
-  WATCH: "Watch",
-  URGENT: "Urgent",
+export const ALERT_LEVEL = {
+  SAFE: "safe",
+  WATCH: "watch",
+  URGENT: "urgent",
 };
 
-/* ---------------- WEIGHTED SYMPTOM MAP ---------------- */
+/* ---------------- SYMPTOM WEIGHTS ---------------- */
 
 const SYMPTOM_SCORE = {
   bleeding: 10,
@@ -40,44 +40,26 @@ const SYMPTOM_SCORE = {
 
 /* ---------------- HELPERS ---------------- */
 
-const normalize = (symptoms) => {
-  if (!Array.isArray(symptoms)) return [];
+const normalize = (arr) =>
+  Array.isArray(arr)
+    ? arr.map((s) => String(s).toLowerCase().trim())
+    : [];
 
-  return symptoms.map((s) =>
-    String(s).toLowerCase().trim()
-  );
+const clamp = (n, min, max) => {
+  const v = Number(n);
+  if (isNaN(v)) return min;
+  return Math.max(min, Math.min(max, v));
 };
 
-const clamp = (num, min, max) => {
-  if (isNaN(num)) return min;
-  return Math.max(min, Math.min(max, num));
-};
-
-/* ---------------- AI REASONING CORE ---------------- */
+/* ---------------- CORE ENGINE ---------------- */
 
 export const analyzeSymptom = (input = {}) => {
   try {
-    /* ---------------- INPUT ---------------- */
-
     const symptoms = normalize(input.symptoms);
+    const week = clamp(input.week, 1, 42);
+    const streak = clamp(input.streak, 0, 999);
 
-    const week = clamp(
-      Number(input.week),
-      1,
-      42
-    );
-
-    const streak = clamp(
-      Number(input.streak),
-      0,
-      999
-    );
-
-    const apiData = input.apiData || null;
-
-    /* ======================================================
-       🧠 SCORE ENGINE
-    ====================================================== */
+    /* ---------------- SCORE ---------------- */
 
     let score = 0;
 
@@ -85,30 +67,23 @@ export const analyzeSymptom = (input = {}) => {
       score += SYMPTOM_SCORE[s] || 1;
     });
 
-    /* ---------------- PREGNANCY WEEK BOOST ---------------- */
+    // pregnancy scaling
+    const weekBoost =
+      week >= 28 ? 1.35 : week >= 13 ? 1.15 : 1;
 
-    let weekRiskBoost = 1;
+    score *= weekBoost;
 
-    if (week >= 28) {
-      weekRiskBoost = 1.35;
-    } else if (week >= 13) {
-      weekRiskBoost = 1.15;
-    }
-
-    score = score * weekRiskBoost;
-
-    /* ======================================================
-       🚨 EMERGENCY ENGINE
-    ====================================================== */
+    /* ---------------- EMERGENCY LAYER ---------------- */
 
     const emergency = detectEmergency({
       symptoms,
       week,
-    });
+    }) || {
+      emergencyLevel: "safe",
+      emergencyScore: 0,
+    };
 
-    /* ======================================================
-       📊 RISK CLASSIFICATION
-    ====================================================== */
+    /* ---------------- RISK ---------------- */
 
     let riskLevel = RISK_LEVEL.LOW;
     let alertLevel = ALERT_LEVEL.SAFE;
@@ -121,139 +96,75 @@ export const analyzeSymptom = (input = {}) => {
       alertLevel = ALERT_LEVEL.WATCH;
     }
 
-    /* ---------------- EMERGENCY OVERRIDE ---------------- */
-
-    if (
-      emergency.emergencyLevel === "emergency"
-    ) {
+    // emergency override (IMPORTANT FIX)
+    if (emergency.emergencyLevel === "emergency") {
       riskLevel = RISK_LEVEL.HIGH;
       alertLevel = ALERT_LEVEL.URGENT;
     }
 
-    if (
-      emergency.emergencyLevel === "urgent" &&
-      riskLevel !== RISK_LEVEL.HIGH
-    ) {
+    if (emergency.emergencyLevel === "urgent" && riskLevel !== RISK_LEVEL.HIGH) {
       riskLevel = RISK_LEVEL.MEDIUM;
       alertLevel = ALERT_LEVEL.WATCH;
     }
 
-    /* ======================================================
-       🎯 CONFIDENCE ENGINE
-    ====================================================== */
+    /* ---------------- CONFIDENCE ---------------- */
 
-    let confidence = Math.round(
-      (score / 20) * 100
-    );
+    let confidence = clamp((score / 20) * 100, 5, 98);
 
-    confidence = clamp(confidence, 5, 98);
+    if (emergency.emergencyLevel === "emergency") confidence = Math.max(confidence, 92);
+    if (emergency.emergencyLevel === "urgent") confidence = Math.max(confidence, 82);
 
-    /* emergency boost */
+    /* ---------------- DOCTOR LOGIC LAYER ---------------- */
 
-    if (
-      emergency.emergencyLevel === "emergency"
-    ) {
-      confidence = Math.max(confidence, 92);
-    }
+    const urgency =
+      alertLevel === ALERT_LEVEL.URGENT
+        ? "doctor"
+        : alertLevel === ALERT_LEVEL.WATCH
+        ? "monitor"
+        : "normal";
 
-    if (
-      emergency.emergencyLevel === "urgent"
-    ) {
-      confidence = Math.max(confidence, 82);
-    }
+    const pregnancyAdvice = getPregnancyAdvice(week);
 
-    /* ======================================================
-       🤰 PREGNANCY CONTEXT
-    ====================================================== */
-
-    const pregnancyAdvice =
-      getPregnancyAdvice(week);
-
-    /* ======================================================
-       ⚡ ENERGY ANALYSIS
-    ====================================================== */
+    /* ---------------- AI OUTPUT LAYER ---------------- */
 
     const energy =
       riskLevel === RISK_LEVEL.HIGH
-        ? "Low energy detected. Your body may require immediate medical attention."
+        ? "Low energy detected. Medical attention may be needed."
         : riskLevel === RISK_LEVEL.MEDIUM
-        ? "Moderate fatigue or discomfort may occur. Hydration and rest are important."
-        : "Energy levels appear stable and appropriate for this stage of pregnancy.";
-
-    /* ======================================================
-       😊 MOOD ANALYSIS
-    ====================================================== */
+        ? "Mild fatigue likely. Rest recommended."
+        : "Energy looks stable.";
 
     const mood =
       riskLevel === RISK_LEVEL.HIGH
-        ? "⚠️ Elevated concern detected"
+        ? "⚠️ High concern detected"
         : riskLevel === RISK_LEVEL.MEDIUM
-        ? "🙂 Mild symptom discomfort detected"
-        : "😊 Stable pregnancy condition";
+        ? "🙂 Mild discomfort"
+        : "😊 Stable condition";
 
-    /* ======================================================
-       🧠 AI INSIGHT
-    ====================================================== */
-
-    let insight =
-      "Symptoms appear within expected pregnancy patterns.";
-
-    if (riskLevel === RISK_LEVEL.HIGH) {
-      insight =
-        "The current symptom pattern may require urgent medical review. Higher-risk indicators were detected.";
-    } else if (
-      riskLevel === RISK_LEVEL.MEDIUM
-    ) {
-      insight =
-        "Symptoms should be monitored carefully. Changes in intensity or duration should not be ignored.";
-    }
-
-    /* ---------------- WEEK INTELLIGENCE ---------------- */
-
-    if (week >= 28) {
-      insight +=
-        " Late-stage pregnancy requires closer monitoring for safety.";
-    }
-
-    /* ---------------- STREAK INTELLIGENCE ---------------- */
-
-    if (streak >= 7) {
-      insight +=
-        " Your consistent tracking helps improve health awareness.";
-    } else if (streak >= 3) {
-      insight +=
-        " Consistent symptom tracking detected.";
-    }
-
-    /* ======================================================
-       🔔 ALERT MESSAGE
-    ====================================================== */
+    const insight =
+      riskLevel === RISK_LEVEL.HIGH
+        ? "High-risk symptom pattern detected. Medical review recommended."
+        : riskLevel === RISK_LEVEL.MEDIUM
+        ? "Symptoms should be monitored carefully."
+        : "Symptoms appear normal for pregnancy stage.";
 
     const alertMessage =
       alertLevel === ALERT_LEVEL.URGENT
-        ? "Please consider contacting your healthcare provider soon."
+        ? "Contact a healthcare provider soon."
         : alertLevel === ALERT_LEVEL.WATCH
-        ? "Monitor symptoms carefully and prioritize rest."
-        : "No immediate danger detected.";
-
-    /* ======================================================
-       🏥 MEDICAL SUMMARY
-    ====================================================== */
+        ? "Monitor symptoms and rest."
+        : "No immediate concern.";
 
     const medicalSummary =
       emergency.emergencyLevel === "emergency"
-        ? "Emergency-level symptoms detected."
-        : emergency.emergencyLevel === "urgent"
-        ? "Urgent pregnancy monitoring recommended."
+        ? "EMERGENCY pattern detected"
         : riskLevel === RISK_LEVEL.HIGH
-        ? "High-risk symptom pattern identified."
+        ? "High risk pattern"
         : riskLevel === RISK_LEVEL.MEDIUM
-        ? "Moderate symptom monitoring advised."
-        : "Condition appears relatively stable.";
+        ? "Moderate monitoring needed"
+        : "Normal condition";
 
-    /* ======================================================
-       📦 FINAL AI RESPONSE
-    ====================================================== */
+    /* ---------------- FINAL RESPONSE ---------------- */
 
     return {
       symptoms,
@@ -262,6 +173,7 @@ export const analyzeSymptom = (input = {}) => {
 
       riskLevel,
       alertLevel,
+      urgency,
 
       confidence,
 
@@ -270,23 +182,17 @@ export const analyzeSymptom = (input = {}) => {
       insight,
 
       pregnancyAdvice,
-
       alertMessage,
       medicalSummary,
 
-      /* 🚨 emergency system */
-      ...emergency,
+      // emergency passthrough (safe structured)
+      emergencyLevel: emergency.emergencyLevel,
+      emergencyScore: emergency.emergencyScore || 0,
 
       timestamp: Date.now(),
     };
-
   } catch (err) {
-    console.error(
-      "SymptomEngine Error:",
-      err
-    );
-
-    /* ---------------- SAFE FALLBACK ---------------- */
+    console.error("SymptomEngine v5 error:", err);
 
     return {
       symptoms: [],
@@ -295,30 +201,20 @@ export const analyzeSymptom = (input = {}) => {
 
       riskLevel: RISK_LEVEL.LOW,
       alertLevel: ALERT_LEVEL.SAFE,
+      urgency: "normal",
 
       confidence: 10,
 
-      mood: "🙂 Stable",
+      mood: "Stable",
       energy: "Normal",
-      insight:
-        "The AI system could not fully analyze symptoms at the moment.",
+      insight: "System fallback mode active",
 
-      pregnancyAdvice:
-        "Please try again later.",
-
-      alertMessage:
-        "No major issue detected.",
-
-      medicalSummary:
-        "Fallback safety system activated.",
+      pregnancyAdvice: "Try again later",
+      alertMessage: "No issue detected",
+      medicalSummary: "Fallback system",
 
       emergencyLevel: "safe",
-      emergencyTitle: "No Emergency",
-      emergencyReason:
-        "Emergency system unavailable.",
-      emergencyAction:
-        "Monitor symptoms carefully.",
-      emergencyScore: 10,
+      emergencyScore: 0,
 
       timestamp: Date.now(),
     };
