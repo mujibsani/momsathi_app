@@ -13,6 +13,7 @@ import { auth } from "./src/services/firebase";
 /* ---------------- SCREENS ---------------- */
 import HomeScreen from "./src/screens/HomeScreen";
 import SymptomScreen from "./src/screens/SymptomScreen";
+// import SymptomScreenV4 from "./src/screens/SymptomScreenV4";
 import HistoryScreen from "./src/screens/HistoryScreen";
 import WeeklyReportScreen from "./src/screens/WeeklyReportScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -56,6 +57,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Symptoms" component={SymptomScreen} />
+      {/* <Tab.Screen name="Symptoms" component={SymptomScreen} /> */}
       <Tab.Screen name="History" component={HistoryScreen} />
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
     </Tab.Navigator>

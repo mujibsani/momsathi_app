@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef
+} from "react";
+
 import {
   View,
   Text,
@@ -10,108 +17,45 @@ import {
   Pressable
 } from "react-native";
 
+import AppContainer from "../components/AppContainer";
 import ResultCard from "../components/ResultCard";
+
 import { analyzeSymptom } from "../engine/symptomEngine";
-import { calculateWeek } from "../utils/pregnancy";
-import { auth, db } from "../services/firebase";
+import { addHistory, subscribeHistory } from "../services/historyApi";
+
 import { doc, getDoc } from "firebase/firestore";
-import { subscribeHistory } from "../services/historyApi";
+import { db, auth } from "../services/firebase";
+import { calculateWeek } from "../utils/pregnancy";
 
-/* ---------------- CONSTANTS ---------------- */
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+/* ---------------- SCREEN ---------------- */
+const { height } = Dimensions.get("window");
 
-const SNAP_TOP = SCREEN_HEIGHT * 0.15;
-const SNAP_MID = SCREEN_HEIGHT * 0.35;
-const SNAP_BOTTOM = SCREEN_HEIGHT;
+const SNAP_BOTTOM = height;
+const SNAP_MID = height * 0.45;
+const SNAP_TOP = height * 0.12;
 
+/* ---------------- COLORS ---------------- */
 const COLORS = {
-  bg: "#F8F9FF",
-  card: "#FFFFFF",
-  primary: "#5B6CFF",
-  text: "#1A1A2E",
-  sub: "#7A7A90",
+  bg: "#F6F8FF",
+  primary: "#2D3A8C",
+  sub: "#666",
+  card: "#FFFFFF"
 };
 
-/* ---------------- COMPONENT ---------------- */
 export default function SymptomScreen() {
   const [result, setResult] = useState(null);
+  const [loadingSlug, setLoadingSlug] = useState(null);
+  const [selectedSlug, setSelectedSlug] = useState(null);
   const [user, setUser] = useState(null);
   const [recent, setRecent] = useState([]);
 
-  /* ---------------- ANIMATION ---------------- */
   const translateY = useRef(new Animated.Value(SNAP_BOTTOM)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
-
-  /* ---------------- OPEN ---------------- */
-  const openCard = () => {
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: SNAP_MID,
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 120,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  /* ---------------- CLOSE ---------------- */
-  const closeCard = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: SNAP_BOTTOM,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setResult(null));
-  };
-
-  /* ---------------- SNAP LOGIC ---------------- */
-  const snapTo = (toValue) => {
-    Animated.spring(translateY, {
-      toValue,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 120,
-    }).start();
-  };
-
-  /* ---------------- DRAG ---------------- */
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 5,
-
-      onPanResponderMove: (_, gesture) => {
-        const newY = SNAP_MID + gesture.dy;
-        translateY.setValue(newY);
-      },
-
-      onPanResponderRelease: (_, gesture) => {
-        const velocity = gesture.vy;
-
-        if (gesture.dy > 150 || velocity > 1.2) {
-          closeCard(); // 👇 swipe down fast
-        } else if (gesture.dy < -120) {
-          snapTo(SNAP_TOP); // 👆 expand
-        } else {
-          snapTo(SNAP_MID); // 🔁 default
-        }
-      },
-    })
-  ).current;
+  const isOpen = useRef(false);
 
   /* ---------------- USER ---------------- */
   useEffect(() => {
-    const load = async () => {
+    const loadUser = async () => {
       const uid = auth.currentUser?.uid;
       if (!uid) return;
 
@@ -119,11 +63,12 @@ export default function SymptomScreen() {
       if (snap.exists()) setUser(snap.data());
     };
 
-    load();
+    loadUser();
   }, []);
 
   const week = useMemo(() => {
     if (!user) return 1;
+
     return user.pregnancyStartDate
       ? calculateWeek(user.pregnancyStartDate)
       : user.pregnancyWeek || 1;
@@ -131,190 +76,321 @@ export default function SymptomScreen() {
 
   /* ---------------- HISTORY ---------------- */
   useEffect(() => {
-    const unsub = subscribeHistory((d) => setRecent(d || []));
+    const unsub = subscribeHistory((data) => {
+      setRecent(data || []);
+    });
+
     return () => unsub && unsub();
   }, []);
 
   /* ---------------- SYMPTOMS ---------------- */
   const groups = [
     {
-      title: "Common",
+      title: "Common Symptoms",
       items: [
         { label: "Headache", slug: "headache", icon: "🧠" },
         { label: "Nausea", slug: "nausea", icon: "🤢" },
-        { label: "Fatigue", slug: "fatigue", icon: "😴" },
-      ],
+        { label: "Fatigue", slug: "fatigue", icon: "😴" }
+      ]
     },
     {
-      title: "Body",
+      title: "Body Changes",
       items: [
         { label: "Swelling", slug: "swelling", icon: "🦵" },
         { label: "Back Pain", slug: "back-pain", icon: "🦴" },
-        { label: "Dizziness", slug: "dizziness", icon: "🌀" },
-      ],
+        { label: "Dizziness", slug: "dizziness", icon: "🌀" }
+      ]
     },
     {
       title: "Other",
       items: [
         { label: "Fever", slug: "fever", icon: "🤒" },
-        { label: "Vomiting", slug: "vomiting", icon: "🤮" },
-      ],
-    },
+        { label: "Vomiting", slug: "vomiting", icon: "🤮" }
+      ]
+    }
   ];
 
-  /* ---------------- ACTION ---------------- */
-  const check = (slug, label) => {
-    const res = analyzeSymptom({
-      symptoms: [slug],
-      week,
-      streak: 1,
-    });
+  /* ---------------- OPEN SHEET ---------------- */
+  const openSheet = () => {
+    isOpen.current = true;
 
-    setResult({ ...res, label });
-
-    // reset position before opening
-    translateY.setValue(SNAP_BOTTOM);
-    openCard();
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: SNAP_MID,
+        useNativeDriver: true,
+        damping: 18,
+        stiffness: 120
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true
+      })
+    ]).start();
   };
+
+  /* ---------------- CLOSE SHEET ---------------- */
+  const closeSheet = () => {
+    isOpen.current = false;
+
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: SNAP_BOTTOM,
+        duration: 250,
+        useNativeDriver: true
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      setResult(null);
+      setSelectedSlug(null);
+      setLoadingSlug(null);
+    });
+  };
+
+  /* ---------------- DRAG ---------------- */
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
+
+      onPanResponderMove: (_, g) => {
+        if (!isOpen.current) return;
+
+        let newY = SNAP_MID + g.dy;
+
+        // clamp movement so it doesn't go crazy
+        if (newY < SNAP_TOP) newY = SNAP_TOP;
+        if (newY > SNAP_BOTTOM) newY = SNAP_BOTTOM;
+
+        translateY.setValue(newY);
+      },
+
+      onPanResponderRelease: (_, g) => {
+        const { dy, vy } = g;
+
+        // 🔥 FULL SCREEN SNAP
+        if (dy < -120 || vy < -1.2) {
+          Animated.spring(translateY, {
+            toValue: SNAP_TOP,
+            useNativeDriver: true,
+            damping: 18,
+            stiffness: 120
+          }).start();
+          return;
+        }
+
+        // 🔥 CLOSE
+        if (dy > 160 || vy > 1.5) {
+          closeSheet();
+          return;
+        }
+
+        // 🔥 DEFAULT MID
+        Animated.spring(translateY, {
+          toValue: SNAP_MID,
+          useNativeDriver: true,
+          damping: 18,
+          stiffness: 120
+        }).start();
+      }
+    })
+  ).current;
+
+  /* ---------------- CHECK ---------------- */
+  const check = useCallback(
+    async (slug, label) => {
+      setSelectedSlug(slug);
+      setLoadingSlug(slug);
+
+      const res = analyzeSymptom({
+        symptoms: [slug],
+        week,
+        streak: 1
+      });
+
+      setResult({ ...res, label });
+
+      await addHistory({
+        problem: label,
+        slug,
+        urgency: res.urgency,
+        riskLevel: res.riskLevel,
+        week,
+        timestamp: Date.now()
+      });
+
+      setLoadingSlug(null);
+      openSheet();
+    },
+    [week]
+  );
 
   /* ---------------- UI ---------------- */
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
-        
-        {/* HEADER */}
-        <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.text }}>
-          🧠 Symptom Check
-        </Text>
+    <AppContainer>
+      <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
 
-        <Text style={{ color: COLORS.sub, marginTop: 4 }}>
-          Week {week} • AI-powered guidance
-        </Text>
+        {/* ================= HEADER (RESTORED) ================= */}
+        <View style={{ padding: 20, paddingBottom: 10 }}>
+          <Text style={{ fontSize: 28, fontWeight: "800", color: COLORS.primary }}>
+            🧠 Symptom AI
+          </Text>
 
-        {/* WEEK CARD */}
-        <View
-          style={{
-            backgroundColor: "#EEF1FF",
-            padding: 20,
-            borderRadius: 20,
-            marginTop: 16,
-          }}
-        >
-          <Text style={{ color: COLORS.sub }}>Your Pregnancy Week</Text>
-          <Text style={{ fontSize: 40, fontWeight: "900", color: COLORS.primary }}>
-            {week}
+          <Text style={{ color: COLORS.sub, marginTop: 4 }}>
+            Week {week} • iOS Health-style intelligent analysis
           </Text>
         </View>
 
-        {/* RECENT */}
-        {recent.length > 0 && (
-          <View style={{ marginTop: 16 }}>
-            <Text style={{ fontWeight: "700" }}>Recent</Text>
+        {/* ================= CONTENT ================= */}
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
 
-            <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
-              {recent.slice(0, 4).map((r) => (
-                <View
-                  key={r.id}
-                  style={{
-                    backgroundColor: "#fff",
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: 20,
-                    marginRight: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Text style={{ fontSize: 12 }}>{r.problem}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* GROUPS */}
-        {groups.map((g, i) => (
-          <View key={i} style={{ marginTop: 20 }}>
-            <Text style={{ fontWeight: "700", marginBottom: 10 }}>
-              {g.title}
+          {/* WEEK CARD */}
+          <View
+            style={{
+              backgroundColor: "#EEF1FF",
+              padding: 20,
+              borderRadius: 20
+            }}
+          >
+            <Text style={{ color: COLORS.sub }}>Pregnancy Week</Text>
+            <Text style={{ fontSize: 40, fontWeight: "900", color: COLORS.primary }}>
+              {week}
             </Text>
-
-            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-              {g.items.map((s) => (
-                <TouchableOpacity
-                  key={s.slug}
-                  onPress={() => check(s.slug, s.label)}
-                  style={{
-                    width: "47%",
-                    backgroundColor: COLORS.card,
-                    padding: 18,
-                    borderRadius: 18,
-                    margin: "1.5%",
-                    elevation: 3,
-                  }}
-                >
-                  <Text style={{ fontSize: 24 }}>{s.icon}</Text>
-                  <Text style={{ marginTop: 8, fontWeight: "600" }}>
-                    {s.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
           </View>
-        ))}
-      </ScrollView>
 
-      {/* BACKDROP */}
-      {result && (
-        <>
+          {/* RECENT */}
+          {recent.length > 0 && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={{ fontWeight: "700" }}>Recent</Text>
+
+              <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8 }}>
+                {recent.slice(0, 4).map((r, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      backgroundColor: "#fff",
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 20,
+                      margin: 4
+                    }}
+                  >
+                    <Text style={{ fontSize: 12 }}>{r.problem}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* SYMPTOMS */}
+          {groups.map((g, i) => (
+            <View key={i} style={{ marginTop: 20 }}>
+              <Text style={{ fontWeight: "700", marginBottom: 10 }}>
+                {g.title}
+              </Text>
+
+              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                {g.items.map((s) => (
+                  <TouchableOpacity
+                    key={s.slug}
+                    onPress={() => check(s.slug, s.label)}
+                    style={{
+                      width: "47%",
+                      backgroundColor: "#fff",
+                      padding: 16,
+                      margin: "1.5%",
+                      borderRadius: 16,
+                      elevation: 3
+                    }}
+                  >
+                    <Text style={{ fontSize: 22 }}>{s.icon}</Text>
+                    <Text style={{ marginTop: 8, fontWeight: "600" }}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+
+        </ScrollView>
+
+        {/* ================= BACKDROP ================= */}
+        {result && (
           <Animated.View
             style={{
               position: "absolute",
               width: "100%",
               height: "100%",
               backgroundColor: "rgba(0,0,0,0.35)",
-              opacity: backdropOpacity,
+              opacity: backdropOpacity
             }}
           >
-            <Pressable style={{ flex: 1 }} onPress={closeCard} />
+            <Pressable style={{ flex: 1 }} onPress={closeSheet} />
           </Animated.View>
+        )}
 
-          {/* FLOATING SHEET */}
+        {/* ================= FLOATING SHEET ================= */}
+
+        {result && (
           <Animated.View
             {...panResponder.panHandlers}
             style={{
               position: "absolute",
               left: 0,
               right: 0,
-              height: SCREEN_HEIGHT,
-              transform: [{ translateY }],
+              bottom: 0,
+              top: 0,
+              transform: [{ translateY }]
             }}
           >
             <View
               style={{
+                flex: 1,
                 backgroundColor: "#fff",
                 borderTopLeftRadius: 24,
                 borderTopRightRadius: 24,
-                padding: 16,
-                flex: 1,
+                overflow: "hidden"
               }}
             >
-              {/* DRAG HANDLE */}
+              {/* HANDLE */}
               <View
                 style={{
-                  width: 40,
-                  height: 5,
-                  backgroundColor: "#ccc",
-                  borderRadius: 3,
-                  alignSelf: "center",
-                  marginBottom: 10,
+                  width: "100%",
+                  alignItems: "center",
+                  paddingVertical: 10
                 }}
-              />
+              >
+                <View
+                  style={{
+                    width: 50,
+                    height: 10,
+                    backgroundColor: "#ccc",
+                    borderRadius: 10
+                  }}
+                />
+              </View>
 
-              <ResultCard result={result} onClose={closeCard} />
+              {/* SCROLL AREA (FIXED) */}
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{
+                  padding: 16,
+                  paddingBottom: 140, // 🔥 IMPORTANT FIX (prevents cut-off)
+                }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <ResultCard result={result} />
+              </ScrollView>
             </View>
           </Animated.View>
-        </>
-      )}
-    </View>
+        )}
+
+      </View>
+    </AppContainer>
   );
 }
